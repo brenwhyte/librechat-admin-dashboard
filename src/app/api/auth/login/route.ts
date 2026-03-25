@@ -104,4 +104,4 @@ export async function POST(request: Request) {
 	}
 }
 
-export { verifySessionToken, SESSION_COOKIE_NAME };
+export { SESSION_COOKIE_NAME, verifySessionToken };
