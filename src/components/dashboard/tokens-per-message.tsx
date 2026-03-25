@@ -35,8 +35,9 @@ async function avgTokenPerMessage(
 	return { prevAvgTokensPerMessageRounded, tokenDiff, roundedDiffPercentage };
 }
 
+const loadableTokenPerMessageAtom = loadable(tokensPerMessageAtom);
+
 const TokensPerMessage = () => {
-	const loadableTokenPerMessageAtom = loadable(tokensPerMessageAtom);
 	const [tokensPerMessage] = useAtom(loadableTokenPerMessageAtom);
 
 	const [messageData, setMessageData] = useState<{

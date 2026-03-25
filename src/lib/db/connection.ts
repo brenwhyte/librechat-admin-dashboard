@@ -56,15 +56,24 @@ if (dbNameOverride && dbNameFromUri && dbNameOverride !== dbNameFromUri) {
 }
 
 /**
- * MongoDB client options optimized for serverless/edge environments
+ * MongoDB client options for a read-only dashboard sharing a DB with LibreChat.
+ *
+ * Pool size rationale:
+ * - The dashboard fires ~14 parallel queries on page load
+ * - Server-side caching (30s TTL) means most requests never hit the DB
+ * - Keep pool small to avoid starving the main LibreChat app of connections
+ * - Cosmos DB M20 has limited connection capacity (~200-500 total)
+ * - maxPoolSize: 20 handles cold-start bursts; caching handles the rest
  */
 const clientOptions: MongoClientOptions = {
-	maxPoolSize: 10,
+	maxPoolSize: 20,
 	minPoolSize: 2,
 	maxIdleTimeMS: 120000,
-	connectTimeoutMS: 10000,
-	socketTimeoutMS: 45000,
+	connectTimeoutMS: 30000,
+	socketTimeoutMS: 60000,
+	serverSelectionTimeoutMS: 30000,
 	retryWrites: false, // Cosmos DB compatibility
+	retryReads: true,
 };
 
 // Global client instance for connection reuse
@@ -115,6 +124,7 @@ export async function getCollection<T extends Document = Document>(
  */
 export const Collections = {
 	MESSAGES: "messages",
+	CONVERSATIONS: "conversations",
 	USERS: "users",
 	AGENTS: "agents",
 	TOOL_CALLS: "toolcalls",
@@ -123,6 +133,20 @@ export const Collections = {
 } as const;
 
 export type CollectionName = (typeof Collections)[keyof typeof Collections];
+
+/**
+ * Maximum time (in ms) the MongoDB **server** is allowed to spend on a single query.
+ *
+ * CRITICAL: This is different from socketTimeoutMS which only controls the driver side.
+ * Without maxTimeMS, a slow aggregation pipeline (e.g. $lookup without index) will continue
+ * running on the DB even after the Node.js driver gives up, holding connections and RUs.
+ * On Cosmos DB M20, this can starve the main LibreChat app of all available resources.
+ *
+ * We use tiered timeouts based on query complexity:
+ * - QUERY_MAX_TIME_MS (60s): All queries use this timeout. After the $lookup elimination
+ *   refactor (Phase 2.5), all queries are single-collection operations with date-range filters.
+ */
+export const QUERY_MAX_TIME_MS = 60_000;
 
 /**
  * Graceful shutdown handler

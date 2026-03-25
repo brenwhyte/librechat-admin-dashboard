@@ -161,15 +161,17 @@ const exportToExcel = async (data: ExportData) => {
 	URL.revokeObjectURL(url);
 };
 
+// Module-scope loadable atoms (avoid re-creation on every render)
+const loadableTokens = loadable(inputOuputTokenAtom);
+const loadableModels = loadable(allModelsStatsTableAtom);
+const loadableAgents = loadable(allAgentsStatsTableAtom);
+const loadableTools = loadable(mcpToolStatsTableAtom);
+
 const ExportButton = () => {
 	const { mode } = useColorScheme();
 	const [isExporting, setIsExporting] = useState(false);
 
 	const dateRange = useAtomValue(dateRangeAtom);
-	const loadableTokens = loadable(inputOuputTokenAtom);
-	const loadableModels = loadable(allModelsStatsTableAtom);
-	const loadableAgents = loadable(allAgentsStatsTableAtom);
-	const loadableTools = loadable(mcpToolStatsTableAtom);
 
 	const tokensData = useAtomValue(loadableTokens);
 	const modelsData = useAtomValue(loadableModels);

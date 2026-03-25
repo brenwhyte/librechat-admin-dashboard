@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { buildCacheKey, withCache } from "@/lib/api/cache";
 import {
 	getDateParamsFromUrl,
 	validateDateRange,
@@ -47,12 +48,15 @@ export async function GET(request: Request) {
 		}
 
 		const granularity = TIME_AREA_TO_GRANULARITY[timeArea];
-		const data = await getAgentTimeSeries({
-			...validation.data,
-			agentName,
-			granularity,
-			timezone,
-		});
+		const cacheKey = buildCacheKey("all-agents-stats-table-chart", request);
+		const data = await withCache(cacheKey, () =>
+			getAgentTimeSeries({
+				...validation.data,
+				agentName,
+				granularity,
+				timezone,
+			}),
+		);
 
 		return NextResponse.json(data);
 	} catch (e) {

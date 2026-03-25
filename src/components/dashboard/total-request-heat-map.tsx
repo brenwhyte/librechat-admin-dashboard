@@ -281,8 +281,9 @@ const createYearlyView = (
 	};
 };
 
+const loadableHeatMapAtom = loadable(totalRequestHeatMapAtom);
+
 const TotalRequestHeatMap = () => {
-	const loadableHeatMapAtom = loadable(totalRequestHeatMapAtom);
 	const [heatMapData] = useAtom(loadableHeatMapAtom);
 	const [dateRange] = useAtom(dateRangeAtom);
 

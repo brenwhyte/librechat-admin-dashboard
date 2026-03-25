@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { buildCacheKey, withCache } from "@/lib/api/cache";
 import { validateAndCalculatePeriod } from "@/lib/api/date-validation";
 import { getMessageStats } from "@/lib/db/repositories";
 
@@ -9,7 +10,10 @@ export async function GET(request: Request) {
 			return validation.error;
 		}
 
-		const data = await getMessageStats(validation.data);
+		const cacheKey = buildCacheKey("avg-stats-per-message", request);
+		const data = await withCache(cacheKey, () =>
+			getMessageStats(validation.data),
+		);
 		return NextResponse.json(data);
 	} catch (e) {
 		console.error("Error in avg-stats-per-message API:", e);

@@ -16,8 +16,9 @@ type Props = {
 
 const margin = { right: 24 };
 
+const loadableChartAtom = loadable(mcpToolStatsChartAtom);
+
 const McpToolStatsTableChart = ({ toolName, serverName }: Props) => {
-	const loadableChartAtom = loadable(mcpToolStatsChartAtom);
 	const [chartResponse] = useAtom(loadableChartAtom);
 	const _timeArea = useAtomValue(dateRangeAtom);
 

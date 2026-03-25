@@ -8,7 +8,7 @@
  * MCP tool calls from regular tool calls.
  */
 
-import { Collections, getCollection } from "../connection";
+import { Collections, getCollection, QUERY_MAX_TIME_MS } from "../connection";
 import type {
 	DateRange,
 	McpToolCallsResult,
@@ -117,7 +117,9 @@ export async function getMcpToolCalls(
 		},
 	];
 
-	return collection.aggregate<McpToolCallsResult>(pipeline).toArray();
+	return collection
+		.aggregate<McpToolCallsResult>(pipeline, { maxTimeMS: QUERY_MAX_TIME_MS })
+		.toArray();
 }
 
 /**
@@ -170,7 +172,9 @@ export async function getAllToolCalls(
 	];
 
 	return collection
-		.aggregate<{ currentToolCalls: number; prevToolCalls: number }>(pipeline)
+		.aggregate<{ currentToolCalls: number; prevToolCalls: number }>(pipeline, {
+			maxTimeMS: QUERY_MAX_TIME_MS,
+		})
 		.toArray();
 }
 
@@ -249,7 +253,11 @@ export async function getMcpToolStatsTable(
 		},
 	];
 
-	return collection.aggregate<McpToolStatsTableEntry>(pipeline).toArray();
+	return collection
+		.aggregate<McpToolStatsTableEntry>(pipeline, {
+			maxTimeMS: QUERY_MAX_TIME_MS,
+		})
+		.toArray();
 }
 
 /**
@@ -332,7 +340,11 @@ export async function getMcpToolStatsChart(
 		},
 	];
 
-	return collection.aggregate<McpToolTimeSeriesEntry>(pipeline).toArray();
+	return collection
+		.aggregate<McpToolTimeSeriesEntry>(pipeline, {
+			maxTimeMS: QUERY_MAX_TIME_MS,
+		})
+		.toArray();
 }
 
 /**
@@ -443,6 +455,7 @@ export async function getWebSearchStats(
 	const result = await collection
 		.aggregate<{ current: WebSearchStatsEntry; prev: WebSearchStatsEntry }>(
 			pipeline,
+			{ maxTimeMS: QUERY_MAX_TIME_MS },
 		)
 		.toArray();
 

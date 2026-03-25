@@ -91,11 +91,13 @@ function Row({ row }: { row: AllAgentsStatsTableRow }) {
 	);
 }
 
+// Module-scope loadable atom (avoid re-creation on every render)
+const loadableAllAgentsStatsAtom = loadable(allAgentsStatsTableAtom);
+
 const AllAgentsStatsTableWithChart: React.FC = () => {
 	const [searchTerm, setSearchTerm] = useState("");
 
 	// Data from state/atom
-	const loadableAllAgentsStatsAtom = loadable(allAgentsStatsTableAtom);
 	const [tableData] = useAtom(loadableAllAgentsStatsAtom);
 
 	// Hydration fix https://nextjs.org/docs/messages/react-hydration-error

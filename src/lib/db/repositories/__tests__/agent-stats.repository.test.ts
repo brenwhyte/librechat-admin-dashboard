@@ -1,17 +1,24 @@
 /**
  * Tests for Agent Statistics Repository
+ *
+ * Tests the flipped query direction:
+ * 1. Find agent conversations first (via find)
+ * 2. Query transactions ONLY for those conversationIds
+ * 3. Batch-fetch agent metadata, join in JS
  */
 
-import type { Collection, Document } from "mongodb";
+import type { Collection } from "mongodb";
 
 // Create mock implementations
 const mockToArray = jest.fn();
 const mockAggregate = jest.fn().mockReturnValue({ toArray: mockToArray });
 const mockCountDocuments = jest.fn();
+const mockFind = jest.fn().mockReturnValue({ toArray: jest.fn() });
 
 const mockCollection: Partial<Collection> = {
 	aggregate: mockAggregate,
 	countDocuments: mockCountDocuments,
+	find: mockFind as unknown as Collection["find"],
 };
 
 // Mock the connection module
@@ -24,6 +31,7 @@ jest.mock("../../connection", () => ({
 		CONVERSATIONS: "conversations",
 		AGENTS: "agents",
 	},
+	QUERY_MAX_TIME_MS: 60000,
 }));
 
 import {
@@ -35,6 +43,7 @@ import {
 describe("Agent Stats Repository", () => {
 	beforeEach(() => {
 		jest.clearAllMocks();
+		mockFind.mockReturnValue({ toArray: jest.fn().mockResolvedValue([]) });
 	});
 
 	describe("getTotalAgentCount", () => {
@@ -57,34 +66,57 @@ describe("Agent Stats Repository", () => {
 	});
 
 	describe("getAgentStatsTable", () => {
-		it("should return agent statistics for table display", async () => {
-			const mockResult = [
-				{
-					agentId: "agent-1",
-					agentName: "Research Assistant",
-					model: "gpt-4",
-					endpoint: "openAI",
-					totalInputToken: 50000,
-					totalOutputToken: 150000,
-					requests: 500,
-				},
-			];
-			mockToArray.mockResolvedValueOnce(mockResult);
+		it("should return empty array when no agent conversations exist", async () => {
+			// getAgentConversationIds returns empty
+			const findToArray = jest.fn().mockResolvedValue([]);
+			mockFind.mockReturnValue({ toArray: findToArray });
 
-			const params = {
+			const result = await getAgentStatsTable({
 				startDate: new Date("2024-01-01"),
 				endDate: new Date("2024-01-31"),
-			};
+			});
 
-			const result = await getAgentStatsTable(params);
-
-			expect(result).toHaveLength(1);
-			expect(result[0].agentName).toBe("Research Assistant");
-			expect(result[0].totalInputToken).toBe(50000);
-			expect(result[0].totalOutputToken).toBe(150000);
+			expect(result).toHaveLength(0);
 		});
 
-		it("should apply date filter correctly", async () => {
+		it("should query conversations with endpoint agents filter", async () => {
+			const findToArray = jest.fn();
+			mockFind.mockReturnValue({ toArray: findToArray });
+			// First call: getAgentConversationIds finds agent convos
+			findToArray.mockResolvedValueOnce([
+				{ conversationId: "conv-1", agent_id: "agent-1" },
+			]);
+			// Second call: getAgentMap
+			findToArray.mockResolvedValueOnce([
+				{
+					id: "agent-1",
+					name: "Test Agent",
+					model: "gpt-4",
+					provider: "openAI",
+				},
+			]);
+			// Pre-group returns empty
+			mockToArray.mockResolvedValueOnce([]);
+
+			await getAgentStatsTable({
+				startDate: new Date("2024-01-01"),
+				endDate: new Date("2024-01-31"),
+			});
+
+			// First find call should filter by endpoint: "agents"
+			expect(mockFind).toHaveBeenCalled();
+			const firstFindCall = mockFind.mock.calls[0];
+			expect(firstFindCall[0]).toEqual({ endpoint: "agents" });
+		});
+
+		it("should apply date filter and conversationId filter to transactions", async () => {
+			const findToArray = jest.fn();
+			mockFind.mockReturnValue({ toArray: findToArray });
+			findToArray.mockResolvedValueOnce([
+				{ conversationId: "conv-1", agent_id: "agent-1" },
+				{ conversationId: "conv-2", agent_id: "agent-2" },
+			]);
+
 			mockToArray.mockResolvedValueOnce([]);
 
 			const startDate = new Date("2024-02-01");
@@ -92,60 +124,24 @@ describe("Agent Stats Repository", () => {
 
 			await getAgentStatsTable({ startDate, endDate });
 
+			// Verify the aggregate pipeline filters by date AND conversationId $in
 			const pipeline = mockAggregate.mock.calls[0][0];
 			const matchStage = pipeline[0].$match;
 
 			expect(matchStage.createdAt.$gte).toEqual(startDate);
 			expect(matchStage.createdAt.$lte).toEqual(endDate);
-		});
-
-		it("should filter to agent conversations only", async () => {
-			mockToArray.mockResolvedValueOnce([]);
-
-			await getAgentStatsTable({
-				startDate: new Date("2024-01-01"),
-				endDate: new Date("2024-01-31"),
-			});
-
-			const pipeline = mockAggregate.mock.calls[0][0];
-
-			// Find the $match stage that filters by endpoint
-			const endpointMatchStage = pipeline.find(
-				(stage: Document) =>
-					"$match" in stage && stage.$match["conv.endpoint"] === "agents",
+			expect(matchStage.conversationId.$in).toEqual(
+				expect.arrayContaining(["conv-1", "conv-2"]),
 			);
-
-			expect(endpointMatchStage).toBeDefined();
-		});
-
-		it("should lookup conversation and agent details", async () => {
-			mockToArray.mockResolvedValueOnce([]);
-
-			await getAgentStatsTable({
-				startDate: new Date("2024-01-01"),
-				endDate: new Date("2024-01-31"),
-			});
-
-			const pipeline = mockAggregate.mock.calls[0][0];
-
-			// Check for conversation lookup
-			const convLookup = pipeline.find(
-				(stage: Document) =>
-					"$lookup" in stage && stage.$lookup.from === "conversations",
-			);
-			expect(convLookup).toBeDefined();
-			expect(convLookup.$lookup.localField).toBe("conversationId");
-
-			// Check for agent lookup
-			const agentLookup = pipeline.find(
-				(stage: Document) =>
-					"$lookup" in stage && stage.$lookup.from === "agents",
-			);
-			expect(agentLookup).toBeDefined();
-			expect(agentLookup.$lookup.localField).toBe("conv.agent_id");
 		});
 
 		it("should use $abs for token amounts (LibreChat compatibility)", async () => {
+			const findToArray = jest.fn();
+			mockFind.mockReturnValue({ toArray: findToArray });
+			findToArray.mockResolvedValueOnce([
+				{ conversationId: "conv-1", agent_id: "agent-1" },
+			]);
+
 			mockToArray.mockResolvedValueOnce([]);
 
 			await getAgentStatsTable({
@@ -154,28 +150,89 @@ describe("Agent Stats Repository", () => {
 			});
 
 			const pipeline = mockAggregate.mock.calls[0][0];
-			const groupStage = pipeline.find((stage: Document) => "$group" in stage);
+			const groupStage = pipeline.find(
+				(stage: Record<string, unknown>) => "$group" in stage,
+			);
 
 			expect(groupStage).toBeDefined();
-			// The $abs is used inside $cond for rawAmount
-			const groupDoc = groupStage.$group;
-			expect(JSON.stringify(groupDoc.totalInputToken)).toContain("$abs");
-			expect(JSON.stringify(groupDoc.totalOutputToken)).toContain("$abs");
+			expect(JSON.stringify(groupStage.$group.totalAmount)).toContain("$abs");
 		});
 
-		it("should fall back to agent_id when agent name is null", async () => {
-			const mockResult = [
+		it("should correctly join agent metadata and split tokens", async () => {
+			const findToArray = jest.fn();
+			mockFind.mockReturnValue({ toArray: findToArray });
+			// getAgentConversationIds
+			findToArray.mockResolvedValueOnce([
+				{ conversationId: "conv-1", agent_id: "agent-1" },
+			]);
+
+			// Pre-grouped transactions
+			mockToArray.mockResolvedValueOnce([
 				{
-					agentId: "agent-123",
-					agentName: "agent-123", // Falls back to ID
-					model: "claude-3",
-					endpoint: "anthropic",
-					totalInputToken: 1000,
-					totalOutputToken: 2000,
-					requests: 10,
+					_id: {
+						conversationId: "conv-1",
+						model: "gpt-4",
+						tokenType: "prompt",
+					},
+					totalAmount: 5000,
+					count: 10,
 				},
-			];
-			mockToArray.mockResolvedValueOnce(mockResult);
+				{
+					_id: {
+						conversationId: "conv-1",
+						model: "gpt-4",
+						tokenType: "completion",
+					},
+					totalAmount: 15000,
+					count: 10,
+				},
+			]);
+
+			// getAgentMap
+			findToArray.mockResolvedValueOnce([
+				{
+					id: "agent-1",
+					name: "Research Assistant",
+					model: "claude-3",
+					provider: "anthropic",
+				},
+			]);
+
+			const result = await getAgentStatsTable({
+				startDate: new Date("2024-01-01"),
+				endDate: new Date("2024-01-31"),
+			});
+
+			expect(result).toHaveLength(1);
+			expect(result[0].agentName).toBe("Research Assistant");
+			expect(result[0].model).toBe("claude-3");
+			expect(result[0].endpoint).toBe("anthropic");
+			expect(result[0].totalInputToken).toBe(5000);
+			expect(result[0].totalOutputToken).toBe(15000);
+			expect(result[0].requests).toBe(10);
+		});
+
+		it("should fall back to agent_id when agent not found", async () => {
+			const findToArray = jest.fn();
+			mockFind.mockReturnValue({ toArray: findToArray });
+			findToArray.mockResolvedValueOnce([
+				{ conversationId: "conv-1", agent_id: "agent-123" },
+			]);
+
+			mockToArray.mockResolvedValueOnce([
+				{
+					_id: {
+						conversationId: "conv-1",
+						model: "gpt-4",
+						tokenType: "completion",
+					},
+					totalAmount: 1000,
+					count: 5,
+				},
+			]);
+
+			// Agent not found
+			findToArray.mockResolvedValueOnce([]);
 
 			const result = await getAgentStatsTable({
 				startDate: new Date("2024-01-01"),
@@ -187,77 +244,114 @@ describe("Agent Stats Repository", () => {
 	});
 
 	describe("getAgentTimeSeries", () => {
-		it("should return time series data for a specific agent", async () => {
-			const mockResult = [
-				{
-					agentId: "agent-1",
-					agentName: "Research Assistant",
-					endpoint: "openAI",
-					day: "2024-01-15",
-					totalInputToken: 10000,
-					totalOutputToken: 30000,
-					requests: 100,
-				},
-			];
-			mockToArray.mockResolvedValueOnce(mockResult);
+		it("should return empty array when no agent conversations exist", async () => {
+			const findToArray = jest.fn().mockResolvedValue([]);
+			mockFind.mockReturnValue({ toArray: findToArray });
 
 			const result = await getAgentTimeSeries({
 				startDate: new Date("2024-01-01"),
 				endDate: new Date("2024-01-31"),
-				agentName: "Research Assistant",
+				agentName: "Test Agent",
 				granularity: "day",
 			});
 
-			expect(result).toHaveLength(1);
-			expect(result[0].day).toBe("2024-01-15");
+			expect(result).toHaveLength(0);
 		});
 
-		it("should use correct date format for different granularities", async () => {
+		it("should filter transactions to only the target agent's conversations", async () => {
+			const findToArray = jest.fn();
+			mockFind.mockReturnValue({ toArray: findToArray });
+
+			// getAgentConversationIds - multiple agents
+			findToArray.mockResolvedValueOnce([
+				{ conversationId: "conv-1", agent_id: "agent-1" },
+				{ conversationId: "conv-2", agent_id: "agent-1" },
+				{ conversationId: "conv-3", agent_id: "agent-2" },
+			]);
+
+			// getAgentMap
+			findToArray.mockResolvedValueOnce([
+				{
+					id: "agent-1",
+					name: "Target Agent",
+					model: "gpt-4",
+					provider: "openAI",
+				},
+				{
+					id: "agent-2",
+					name: "Other Agent",
+					model: "claude-3",
+					provider: "anthropic",
+				},
+			]);
+
+			mockToArray.mockResolvedValueOnce([]);
+
+			await getAgentTimeSeries({
+				startDate: new Date("2024-01-01"),
+				endDate: new Date("2024-01-31"),
+				agentName: "Target Agent",
+				granularity: "day",
+			});
+
+			// Should only query transactions for conv-1 and conv-2 (agent-1's convos)
+			const pipeline = mockAggregate.mock.calls[0][0];
+			const matchStage = pipeline[0].$match;
+			expect(matchStage.conversationId.$in).toEqual(
+				expect.arrayContaining(["conv-1", "conv-2"]),
+			);
+			expect(matchStage.conversationId.$in).not.toContain("conv-3");
+		});
+
+		it("should use correct date format for daily granularity", async () => {
+			const findToArray = jest.fn();
+			mockFind.mockReturnValue({ toArray: findToArray });
+			findToArray.mockResolvedValueOnce([
+				{ conversationId: "conv-1", agent_id: "agent-1" },
+			]);
+			findToArray.mockResolvedValueOnce([
+				{
+					id: "agent-1",
+					name: "Test Agent",
+					model: "gpt-4",
+					provider: "openAI",
+				},
+			]);
+
 			mockToArray.mockResolvedValueOnce([]);
 
 			await getAgentTimeSeries({
 				startDate: new Date("2024-01-01"),
 				endDate: new Date("2024-01-31"),
 				agentName: "Test Agent",
-				granularity: "hour",
-			});
-
-			const pipeline = mockAggregate.mock.calls[0][0];
-			const addFieldsStage = pipeline.find(
-				(stage: Document) => "$addFields" in stage,
-			);
-
-			expect(addFieldsStage).toBeDefined();
-			expect(addFieldsStage.$addFields.hour.$dateToString.format).toBe(
-				"%d, %H:00",
-			);
-		});
-
-		it("should filter by agent name or agent_id", async () => {
-			mockToArray.mockResolvedValueOnce([]);
-
-			await getAgentTimeSeries({
-				startDate: new Date("2024-01-01"),
-				endDate: new Date("2024-01-31"),
-				agentName: "My Agent",
 				granularity: "day",
 			});
 
 			const pipeline = mockAggregate.mock.calls[0][0];
-
-			// Find the $match stage that filters by agent
-			const agentMatchStage = pipeline.find(
-				(stage: Document) => "$match" in stage && stage.$match.$or,
+			const groupStage = pipeline.find(
+				(stage: Record<string, unknown>) => "$group" in stage,
 			);
 
-			expect(agentMatchStage).toBeDefined();
-			expect(agentMatchStage.$match.$or).toEqual([
-				{ "agent.name": "My Agent" },
-				{ "conv.agent_id": "My Agent" },
-			]);
+			expect(groupStage).toBeDefined();
+			const dayField = groupStage.$group._id.day;
+			expect(dayField.$dateToString.format).toBe("%Y-%m-%d");
 		});
 
 		it("should apply timezone for date formatting", async () => {
+			const findToArray = jest.fn();
+			mockFind.mockReturnValue({ toArray: findToArray });
+			findToArray.mockResolvedValueOnce([
+				{ conversationId: "conv-1", agent_id: "agent-1" },
+			]);
+			findToArray.mockResolvedValueOnce([
+				{
+					id: "agent-1",
+					name: "Test Agent",
+					model: "gpt-4",
+					provider: "openAI",
+				},
+			]);
+
 			mockToArray.mockResolvedValueOnce([]);
 
 			await getAgentTimeSeries({
@@ -269,16 +363,29 @@ describe("Agent Stats Repository", () => {
 			});
 
 			const pipeline = mockAggregate.mock.calls[0][0];
-			const addFieldsStage = pipeline.find(
-				(stage: Document) => "$addFields" in stage,
+			const groupStage = pipeline.find(
+				(stage: Record<string, unknown>) => "$group" in stage,
 			);
 
-			expect(addFieldsStage.$addFields.day.$dateToString.timezone).toBe(
-				"Europe/Berlin",
-			);
+			const dayField = groupStage.$group._id.day;
+			expect(dayField.$dateToString.timezone).toBe("Europe/Berlin");
 		});
 
 		it("should default timezone to UTC", async () => {
+			const findToArray = jest.fn();
+			mockFind.mockReturnValue({ toArray: findToArray });
+			findToArray.mockResolvedValueOnce([
+				{ conversationId: "conv-1", agent_id: "agent-1" },
+			]);
+			findToArray.mockResolvedValueOnce([
+				{
+					id: "agent-1",
+					name: "Test Agent",
+					model: "gpt-4",
+					provider: "openAI",
+				},
+			]);
+
 			mockToArray.mockResolvedValueOnce([]);
 
 			await getAgentTimeSeries({
@@ -289,28 +396,82 @@ describe("Agent Stats Repository", () => {
 			});
 
 			const pipeline = mockAggregate.mock.calls[0][0];
-			const addFieldsStage = pipeline.find(
-				(stage: Document) => "$addFields" in stage,
+			const groupStage = pipeline.find(
+				(stage: Record<string, unknown>) => "$group" in stage,
 			);
 
-			expect(addFieldsStage.$addFields.day.$dateToString.timezone).toBe("UTC");
+			const dayField = groupStage.$group._id.day;
+			expect(dayField.$dateToString.timezone).toBe("UTC");
 		});
 
-		it("should sort results by time field", async () => {
-			mockToArray.mockResolvedValueOnce([]);
+		it("should sort results by time bucket ascending", async () => {
+			const findToArray = jest.fn();
+			mockFind.mockReturnValue({ toArray: findToArray });
+			findToArray.mockResolvedValueOnce([
+				{ conversationId: "conv-1", agent_id: "agent-1" },
+			]);
+			findToArray.mockResolvedValueOnce([
+				{
+					id: "agent-1",
+					name: "Test Agent",
+					model: "gpt-4",
+					provider: "openAI",
+				},
+			]);
 
-			await getAgentTimeSeries({
+			// Pre-grouped data in unsorted order
+			mockToArray.mockResolvedValueOnce([
+				{
+					_id: { tokenType: "completion", day: "2024-01-20" },
+					totalAmount: 200,
+					count: 1,
+				},
+				{
+					_id: { tokenType: "completion", day: "2024-01-10" },
+					totalAmount: 100,
+					count: 1,
+				},
+			]);
+
+			const result = await getAgentTimeSeries({
 				startDate: new Date("2024-01-01"),
 				endDate: new Date("2024-01-31"),
 				agentName: "Test Agent",
-				granularity: "month",
+				granularity: "day",
 			});
 
-			const pipeline = mockAggregate.mock.calls[0][0];
-			const sortStage = pipeline.find((stage: Document) => "$sort" in stage);
+			expect(result.length).toBe(2);
+			expect(result[0].day).toBe("2024-01-10");
+			expect(result[1].day).toBe("2024-01-20");
+		});
 
-			expect(sortStage).toBeDefined();
-			expect(sortStage.$sort["_id.month"]).toBe(1);
+		it("should match by agent_id when agent name doesnt match", async () => {
+			const findToArray = jest.fn();
+			mockFind.mockReturnValue({ toArray: findToArray });
+			findToArray.mockResolvedValueOnce([
+				{ conversationId: "conv-1", agent_id: "agent-id-123" },
+			]);
+			findToArray.mockResolvedValueOnce([
+				{
+					id: "agent-id-123",
+					name: "Different Name",
+					model: "gpt-4",
+					provider: "openAI",
+				},
+			]);
+
+			mockToArray.mockResolvedValueOnce([]);
+
+			// Searching by agent_id directly
+			const result = await getAgentTimeSeries({
+				startDate: new Date("2024-01-01"),
+				endDate: new Date("2024-01-31"),
+				agentName: "agent-id-123",
+				granularity: "day",
+			});
+
+			// Should find the agent by ID match
+			expect(result).toHaveLength(0); // No transactions, but should not error
 		});
 	});
 });

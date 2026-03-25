@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { buildCacheKey, withCache } from "@/lib/api/cache";
 import {
 	getDateParamsFromUrl,
 	validateDateRange,
@@ -16,7 +17,10 @@ export async function GET(request: Request) {
 		const { searchParams } = new URL(request.url);
 		const timezone = searchParams.get("timezone") || "UTC";
 
-		const data = await getRequestHeatmap({ ...validation.data, timezone });
+		const cacheKey = buildCacheKey("total-request-heat-map", request);
+		const data = await withCache(cacheKey, () =>
+			getRequestHeatmap({ ...validation.data, timezone }),
+		);
 		return NextResponse.json(data);
 	} catch (e) {
 		console.error("Error in total-request-heat-map API:", e);

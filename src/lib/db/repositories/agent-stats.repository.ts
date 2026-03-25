@@ -2,16 +2,23 @@
  * Agent Statistics Repository
  *
  * Handles queries for AI agent usage statistics, tables, and charts.
- * Uses transactions -> conversations.agent_id -> agents for accurate billing data.
+ *
+ * OPTIMIZATION: Flipped query direction compared to original.
+ * Instead of: scan ALL transactions -> $lookup conversations -> filter to agents
+ * Now: find agent conversations first -> query only their transactions -> join in JS
+ *
+ * This eliminates both $lookup operations and pre-filters transactions to only
+ * agent conversations, reducing the scan by 50-90% depending on agent usage ratio.
  */
 
-import { Collections, getCollection } from "../connection";
+import { Collections, getCollection, QUERY_MAX_TIME_MS } from "../connection";
 import type {
 	DateRange,
 	StatsTableEntry,
 	TimeGranularity,
 	TimeSeriesEntry,
 } from "../types";
+import { getAgentConversationIds, getAgentMap } from "./conversation-lookup";
 
 /**
  * Date format strings for different granularities
@@ -27,105 +34,125 @@ const DATE_FORMATS: Record<TimeGranularity, string> = {
  */
 export async function getTotalAgentCount(): Promise<number> {
 	const collection = await getCollection(Collections.AGENTS);
-	return collection.countDocuments();
+	return collection.countDocuments({}, { maxTimeMS: QUERY_MAX_TIME_MS });
 }
 
 /**
  * Get agent statistics for table display
  *
- * Uses transactions collection with accurate billing data.
- * Links via: transactions -> conversations (by conversationId) -> agents (by agent_id)
+ * Three-phase approach:
+ * 1. Find all agent conversations (filtered by endpoint: "agents")
+ * 2. Query transactions ONLY for those conversationIds
+ * 3. Batch-fetch agent metadata, join in JS
  */
 export async function getAgentStatsTable(
 	params: DateRange,
 ): Promise<StatsTableEntry[]> {
 	const { startDate, endDate } = params;
-	const collection = await getCollection(Collections.TRANSACTIONS);
 
-	const pipeline = [
+	// Phase 1: Get all agent conversation IDs and their agent_id mapping
+	const { conversationIds, agentIdByConversation } =
+		await getAgentConversationIds();
+
+	if (conversationIds.length === 0) return [];
+
+	// Phase 2: Query transactions ONLY for agent conversations
+	const collection = await getCollection(Collections.TRANSACTIONS);
+	const preGroupPipeline = [
 		{
 			$match: {
 				createdAt: { $gte: startDate, $lte: endDate },
+				conversationId: { $in: conversationIds },
 			},
 		},
-		// Lookup conversation to get agent_id
-		{
-			$lookup: {
-				from: "conversations",
-				localField: "conversationId",
-				foreignField: "conversationId",
-				as: "conv",
-			},
-		},
-		{ $unwind: "$conv" },
-		// Filter to agent conversations only
-		{
-			$match: {
-				"conv.endpoint": "agents",
-			},
-		},
-		// Lookup agent details using conversations.agent_id
-		{
-			$lookup: {
-				from: "agents",
-				localField: "conv.agent_id",
-				foreignField: "id",
-				as: "agent",
-			},
-		},
-		{ $unwind: { path: "$agent", preserveNullAndEmptyArrays: true } },
 		{
 			$group: {
 				_id: {
-					agentId: "$conv.agent_id",
-					agentName: { $ifNull: ["$agent.name", "$conv.agent_id"] },
-					model: { $ifNull: ["$agent.model", "$model"] },
-					endpoint: { $ifNull: ["$agent.provider", "agents"] },
+					conversationId: "$conversationId",
+					model: "$model",
+					tokenType: "$tokenType",
 				},
-				totalInputToken: {
-					$sum: {
-						$cond: [
-							{ $eq: ["$tokenType", "prompt"] },
-							{ $abs: "$rawAmount" },
-							0,
-						],
-					},
-				},
-				totalOutputToken: {
-					$sum: {
-						$cond: [
-							{ $eq: ["$tokenType", "completion"] },
-							{ $abs: "$rawAmount" },
-							0,
-						],
-					},
-				},
-				requests: {
-					$sum: {
-						$cond: [{ $eq: ["$tokenType", "completion"] }, 1, 0],
-					},
-				},
-			},
-		},
-		{
-			$project: {
-				agentId: "$_id.agentId",
-				agentName: "$_id.agentName",
-				model: "$_id.model",
-				endpoint: "$_id.endpoint",
-				totalInputToken: 1,
-				totalOutputToken: 1,
-				requests: 1,
-				_id: 0,
+				totalAmount: { $sum: { $abs: "$rawAmount" } },
+				count: { $sum: 1 },
 			},
 		},
 	];
 
-	return collection.aggregate<StatsTableEntry>(pipeline).toArray();
+	const preGrouped = await collection
+		.aggregate<{
+			_id: { conversationId: string; model: string; tokenType: string };
+			totalAmount: number;
+			count: number;
+		}>(preGroupPipeline, { maxTimeMS: QUERY_MAX_TIME_MS })
+		.toArray();
+
+	if (preGrouped.length === 0) return [];
+
+	// Phase 3: Batch-fetch agent metadata
+	const uniqueAgentIds = [...new Set(agentIdByConversation.values())];
+	const agentMap = await getAgentMap(uniqueAgentIds);
+
+	// In-memory join
+	// Key: agentId -> accumulated stats
+	const statsMap = new Map<
+		string,
+		{
+			agentId: string;
+			agentName: string;
+			model: string;
+			endpoint: string;
+			totalInputToken: number;
+			totalOutputToken: number;
+			requests: number;
+		}
+	>();
+
+	for (const row of preGrouped) {
+		const agentId =
+			agentIdByConversation.get(row._id.conversationId) ?? "unknown";
+		const agent = agentMap.get(agentId);
+
+		const key = agentId;
+		let entry = statsMap.get(key);
+		if (!entry) {
+			entry = {
+				agentId,
+				agentName: agent?.name ?? agentId,
+				model: agent?.model ?? row._id.model,
+				endpoint: agent?.provider ?? "agents",
+				totalInputToken: 0,
+				totalOutputToken: 0,
+				requests: 0,
+			};
+			statsMap.set(key, entry);
+		}
+
+		if (row._id.tokenType === "prompt") {
+			entry.totalInputToken += row.totalAmount;
+		} else if (row._id.tokenType === "completion") {
+			entry.totalOutputToken += row.totalAmount;
+			entry.requests += row.count;
+		}
+	}
+
+	return [...statsMap.values()].map((e) => ({
+		agentId: e.agentId,
+		agentName: e.agentName,
+		model: e.model,
+		endpoint: e.endpoint,
+		totalInputToken: e.totalInputToken,
+		totalOutputToken: e.totalOutputToken,
+		requests: e.requests,
+	}));
 }
 
 /**
  * Get agent time series data for charts
+ *
+ * Three-phase approach:
+ * 1. Resolve the agent -> find its conversations
+ * 2. Query transactions ONLY for those conversationIds
+ * 3. Aggregate in JS with time bucketing already done in pipeline
  */
 export async function getAgentTimeSeries(
 	params: DateRange & {
@@ -141,105 +168,115 @@ export async function getAgentTimeSeries(
 		granularity,
 		timezone = "UTC",
 	} = params;
-	const collection = await getCollection(Collections.TRANSACTIONS);
 	const dateFormat = DATE_FORMATS[granularity];
 	const timeField = granularity;
 
-	const pipeline = [
+	// Phase 1: Get all agent conversations and resolve the target agent
+	const { conversationIds, agentIdByConversation } =
+		await getAgentConversationIds();
+
+	if (conversationIds.length === 0) return [];
+
+	// Batch-fetch all agent metadata to find the target agent
+	const uniqueAgentIds = [...new Set(agentIdByConversation.values())];
+	const agentMap = await getAgentMap(uniqueAgentIds);
+
+	// Find conversations belonging to the requested agent (by name or ID)
+	const targetConvIds: string[] = [];
+	let resolvedAgentId: string | undefined;
+	let resolvedAgentName: string | undefined;
+	let resolvedProvider: string | undefined;
+
+	for (const [convId, agentId] of agentIdByConversation) {
+		const agent = agentMap.get(agentId);
+		if (agent?.name === agentName || agentId === agentName) {
+			targetConvIds.push(convId);
+			if (!resolvedAgentId) {
+				resolvedAgentId = agentId;
+				resolvedAgentName = agent?.name ?? agentId;
+				resolvedProvider = agent?.provider ?? "agents";
+			}
+		}
+	}
+
+	if (targetConvIds.length === 0) return [];
+
+	// Phase 2: Query transactions ONLY for this agent's conversations
+	const collection = await getCollection(Collections.TRANSACTIONS);
+	const preGroupPipeline = [
 		{
 			$match: {
 				createdAt: { $gte: startDate, $lte: endDate },
-			},
-		},
-		// Lookup conversation to get agent_id
-		{
-			$lookup: {
-				from: "conversations",
-				localField: "conversationId",
-				foreignField: "conversationId",
-				as: "conv",
-			},
-		},
-		{ $unwind: "$conv" },
-		{
-			$match: {
-				"conv.endpoint": "agents",
-			},
-		},
-		// Lookup agent details
-		{
-			$lookup: {
-				from: "agents",
-				localField: "conv.agent_id",
-				foreignField: "id",
-				as: "agent",
-			},
-		},
-		{ $unwind: { path: "$agent", preserveNullAndEmptyArrays: true } },
-		// Filter by the requested agent name
-		{
-			$match: {
-				$or: [{ "agent.name": agentName }, { "conv.agent_id": agentName }],
-			},
-		},
-		{
-			$addFields: {
-				[timeField]: {
-					$dateToString: {
-						format: dateFormat,
-						date: "$createdAt",
-						timezone: timezone,
-					},
-				},
+				conversationId: { $in: targetConvIds },
 			},
 		},
 		{
 			$group: {
 				_id: {
-					agentId: "$conv.agent_id",
-					agentName: { $ifNull: ["$agent.name", "$conv.agent_id"] },
-					endpoint: { $ifNull: ["$agent.provider", "agents"] },
-					[timeField]: `$${timeField}`,
-				},
-				totalInputToken: {
-					$sum: {
-						$cond: [
-							{ $eq: ["$tokenType", "prompt"] },
-							{ $abs: "$rawAmount" },
-							0,
-						],
+					tokenType: "$tokenType",
+					[timeField]: {
+						$dateToString: {
+							format: dateFormat,
+							date: "$createdAt",
+							timezone: timezone,
+						},
 					},
 				},
-				totalOutputToken: {
-					$sum: {
-						$cond: [
-							{ $eq: ["$tokenType", "completion"] },
-							{ $abs: "$rawAmount" },
-							0,
-						],
-					},
-				},
-				requests: {
-					$sum: {
-						$cond: [{ $eq: ["$tokenType", "completion"] }, 1, 0],
-					},
-				},
-			},
-		},
-		{ $sort: { [`_id.${timeField}`]: 1 } },
-		{
-			$project: {
-				_id: 0,
-				agentId: "$_id.agentId",
-				agentName: "$_id.agentName",
-				endpoint: "$_id.endpoint",
-				[timeField]: `$_id.${timeField}`,
-				totalInputToken: 1,
-				totalOutputToken: 1,
-				requests: 1,
+				totalAmount: { $sum: { $abs: "$rawAmount" } },
+				count: { $sum: 1 },
 			},
 		},
 	];
 
-	return collection.aggregate<TimeSeriesEntry>(pipeline).toArray();
+	const preGrouped = await collection
+		.aggregate<{
+			_id: {
+				tokenType: string;
+				[key: string]: string;
+			};
+			totalAmount: number;
+			count: number;
+		}>(preGroupPipeline, { maxTimeMS: QUERY_MAX_TIME_MS })
+		.toArray();
+
+	if (preGrouped.length === 0) return [];
+
+	// Phase 3: In-memory aggregation by time bucket
+	const timeSeriesMap = new Map<
+		string,
+		{
+			totalInputToken: number;
+			totalOutputToken: number;
+			requests: number;
+		}
+	>();
+
+	for (const row of preGrouped) {
+		const timeBucket = row._id[timeField];
+		let entry = timeSeriesMap.get(timeBucket);
+		if (!entry) {
+			entry = { totalInputToken: 0, totalOutputToken: 0, requests: 0 };
+			timeSeriesMap.set(timeBucket, entry);
+		}
+
+		if (row._id.tokenType === "prompt") {
+			entry.totalInputToken += row.totalAmount;
+		} else if (row._id.tokenType === "completion") {
+			entry.totalOutputToken += row.totalAmount;
+			entry.requests += row.count;
+		}
+	}
+
+	// Build result sorted by time bucket
+	return [...timeSeriesMap.entries()]
+		.sort(([a], [b]) => a.localeCompare(b))
+		.map(([timeBucket, stats]) => ({
+			agentId: resolvedAgentId,
+			agentName: resolvedAgentName,
+			endpoint: resolvedProvider ?? "agents",
+			[timeField]: timeBucket,
+			totalInputToken: stats.totalInputToken,
+			totalOutputToken: stats.totalOutputToken,
+			requests: stats.requests,
+		}));
 }

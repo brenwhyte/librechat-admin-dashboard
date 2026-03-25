@@ -5,7 +5,7 @@ import { blueGrey } from "@mui/material/colors";
 import { LineChart, lineElementClasses } from "@mui/x-charts/LineChart";
 import { useAtom, useAtomValue } from "jotai";
 import { loadable } from "jotai/utils";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { allAgentsStatsTableChartAtom } from "@/atoms/all-agents-stats-table-chart.atom";
 import { dateRangeAtom } from "@/atoms/date-range-atom";
 import type { StatsTableChartItem } from "../models/stats-table-chart-item";
@@ -22,7 +22,10 @@ const AllAgentsStatsTableChart = ({ agent }: Agent) => {
 
 	const timeArea = useAtomValue(dateRangeAtom);
 
-	const loadableAgentChartAtom = loadable(allAgentsStatsTableChartAtom(agent));
+	const loadableAgentChartAtom = useMemo(
+		() => loadable(allAgentsStatsTableChartAtom(agent)),
+		[agent],
+	);
 	const [agentChartData] = useAtom(loadableAgentChartAtom);
 
 	useEffect(() => {

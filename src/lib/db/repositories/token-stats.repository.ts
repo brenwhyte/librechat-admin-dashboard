@@ -4,7 +4,7 @@
  * Handles queries for input/output token metrics.
  */
 
-import { Collections, getCollection } from "../connection";
+import { Collections, getCollection, QUERY_MAX_TIME_MS } from "../connection";
 import type {
 	DateRange,
 	MessageStatsResult,
@@ -115,7 +115,9 @@ export async function getTokenCounts(
 		},
 	];
 
-	return collection.aggregate<TokenCountResult>(pipeline).toArray();
+	return collection
+		.aggregate<TokenCountResult>(pipeline, { maxTimeMS: QUERY_MAX_TIME_MS })
+		.toArray();
 }
 
 /**
@@ -181,7 +183,9 @@ export async function getMessageStats(
 		},
 	];
 
-	return collection.aggregate<MessageStatsResult>(pipeline).toArray();
+	return collection
+		.aggregate<MessageStatsResult>(pipeline, { maxTimeMS: QUERY_MAX_TIME_MS })
+		.toArray();
 }
 
 /**
@@ -230,5 +234,7 @@ export async function getRequestHeatmap(
 		},
 	];
 
-	return collection.aggregate(pipeline).toArray();
+	return collection
+		.aggregate(pipeline, { maxTimeMS: QUERY_MAX_TIME_MS })
+		.toArray();
 }

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { buildCacheKey, withCache } from "@/lib/api/cache";
 import { validateAndCalculatePeriod } from "@/lib/api/date-validation";
 import { getMcpToolCalls } from "@/lib/db/repositories";
 
@@ -9,7 +10,10 @@ export async function GET(request: Request) {
 			return validation.error;
 		}
 
-		const data = await getMcpToolCalls(validation.data);
+		const cacheKey = buildCacheKey("mcp-tool-calls", request);
+		const data = await withCache(cacheKey, () =>
+			getMcpToolCalls(validation.data),
+		);
 		return NextResponse.json(
 			data[0] ?? { currentMcpToolCalls: 0, prevMcpToolCalls: 0 },
 		);

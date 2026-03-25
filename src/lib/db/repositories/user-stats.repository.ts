@@ -4,7 +4,7 @@
  * Handles queries related to user counts and activity metrics.
  */
 
-import { Collections, getCollection } from "../connection";
+import { Collections, getCollection, QUERY_MAX_TIME_MS } from "../connection";
 import type {
 	ActiveUsersResult,
 	ConversationsResult,
@@ -47,7 +47,9 @@ export async function getActiveUsers(
 		},
 	];
 
-	return collection.aggregate<ActiveUsersResult>(pipeline).toArray();
+	return collection
+		.aggregate<ActiveUsersResult>(pipeline, { maxTimeMS: QUERY_MAX_TIME_MS })
+		.toArray();
 }
 
 /**
@@ -86,7 +88,9 @@ export async function getConversations(
 		},
 	];
 
-	return collection.aggregate<ConversationsResult>(pipeline).toArray();
+	return collection
+		.aggregate<ConversationsResult>(pipeline, { maxTimeMS: QUERY_MAX_TIME_MS })
+		.toArray();
 }
 
 /**
@@ -94,5 +98,5 @@ export async function getConversations(
  */
 export async function getTotalUserCount(): Promise<number> {
 	const collection = await getCollection(Collections.USERS);
-	return collection.countDocuments();
+	return collection.countDocuments({}, { maxTimeMS: QUERY_MAX_TIME_MS });
 }

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { buildCacheKey, withCache } from "@/lib/api/cache";
 import {
 	getDateParamsFromUrl,
 	validateDateRange,
@@ -36,12 +37,15 @@ export async function GET(request: Request) {
 
 		const timezone = url.searchParams.get("timezone") || "UTC";
 
-		const data = await getMcpToolStatsChart({
-			startDate,
-			endDate,
-			granularity,
-			timezone,
-		});
+		const cacheKey = buildCacheKey("mcp-tool-stats-chart", request);
+		const data = await withCache(cacheKey, () =>
+			getMcpToolStatsChart({
+				startDate,
+				endDate,
+				granularity,
+				timezone,
+			}),
+		);
 
 		return NextResponse.json({
 			data,

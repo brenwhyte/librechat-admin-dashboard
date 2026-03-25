@@ -1,4 +1,4 @@
-import { Collections, getCollection } from "../connection";
+import { Collections, getCollection, QUERY_MAX_TIME_MS } from "../connection";
 import type { PeriodComparison, TokenCountResult } from "../types";
 
 /**
@@ -43,7 +43,9 @@ export async function getFilesProcessedStats(
 		},
 	];
 
-	const result = await collection.aggregate(pipeline).toArray();
+	const result = await collection
+		.aggregate(pipeline, { maxTimeMS: QUERY_MAX_TIME_MS })
+		.toArray();
 
 	// Map to TokenCountResult structure to reuse existing types/components if possible,
 	// or just return simple object. Here we return a structure similar to other stats.

@@ -78,6 +78,30 @@ export const RECOMMENDED_INDEXES = {
 			options: { unique: true, background: true },
 		},
 	],
+	conversations: [
+		// CRITICAL: Used by 7 $lookup operations in model-stats and agent-stats repositories.
+		// Without this index, every $lookup triggers a full collection scan on conversations.
+		// This is the single most impactful missing index for dashboard performance.
+		{
+			name: "idx_conversations_conversationId",
+			keys: { conversationId: 1 },
+			options: { background: true },
+		},
+		// For agent-related queries that filter by endpoint
+		{
+			name: "idx_conversations_endpoint",
+			keys: { endpoint: 1 },
+			options: { background: true },
+		},
+	],
+	files: [
+		// For files-processed date range queries
+		{
+			name: "idx_files_createdAt",
+			keys: { createdAt: -1 },
+			options: { background: true },
+		},
+	],
 };
 
 /**
@@ -103,6 +127,14 @@ db.users.createIndex({ userId: 1 }, { name: "idx_users_userId", unique: true, ba
 // Agents collection indexes
 db.agents.createIndex({ id: 1 }, { name: "idx_agents_id", unique: true, background: true });
 
+// Conversations collection indexes (CRITICAL for $lookup performance)
+// Without these, 7 API routes perform full collection scans on every request
+db.conversations.createIndex({ conversationId: 1 }, { name: "idx_conversations_conversationId", background: true });
+db.conversations.createIndex({ endpoint: 1 }, { name: "idx_conversations_endpoint", background: true });
+
+// Files collection indexes
+db.files.createIndex({ createdAt: -1 }, { name: "idx_files_createdAt", background: true });
+
 // Verify indexes
 print("Messages indexes:");
 printjson(db.messages.getIndexes());
@@ -112,6 +144,10 @@ print("Users indexes:");
 printjson(db.users.getIndexes());
 print("Agents indexes:");
 printjson(db.agents.getIndexes());
+print("Conversations indexes:");
+printjson(db.conversations.getIndexes());
+print("Files indexes:");
+printjson(db.files.getIndexes());
 `;
 
 /**
@@ -120,13 +156,14 @@ printjson(db.agents.getIndexes());
 export const PERFORMANCE_RECOMMENDATIONS = {
 	connectionPooling: {
 		description:
-			"Connection pool settings optimized for serverless environments",
+			"Pool sized conservatively to avoid starving the main LibreChat app. Server-side caching (30s TTL) handles request deduplication.",
 		settings: {
-			maxPoolSize: 10,
+			maxPoolSize: 20,
 			minPoolSize: 2,
 			maxIdleTimeMS: 120000,
-			connectTimeoutMS: 10000,
-			socketTimeoutMS: 45000,
+			connectTimeoutMS: 30000,
+			socketTimeoutMS: 60000,
+			serverSelectionTimeoutMS: 30000,
 		},
 	},
 	queryOptimizations: [

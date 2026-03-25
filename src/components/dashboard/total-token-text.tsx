@@ -25,6 +25,8 @@ function getTotalTokens(totalTokenData: AvgTokensPerMessage[]) {
 	return { totalTokenCount, tokenDiff, roundedDiffPercentage };
 }
 
+const loadableTokenAtom = loadable(tokensPerMessageAtom);
+
 const TotalTokenText = () => {
 	const [tokenData, setTokenData] = useState<{
 		totalTokenCount: number;
@@ -32,7 +34,6 @@ const TotalTokenText = () => {
 		roundedDiffPercentage: number;
 	} | null>(null);
 
-	const loadableTokenAtom = loadable(tokensPerMessageAtom);
 	const [totalTokenData] = useAtom(loadableTokenAtom);
 
 	const { vars } = useTheme();

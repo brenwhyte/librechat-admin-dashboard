@@ -1,123 +1,57 @@
 "use client";
 
+import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
 import { Box, useColorScheme } from "@mui/material";
 import Skeleton from "@mui/material/Skeleton";
 import { useTheme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
-import {
-	PieChart,
-	type PieChartProps,
-	pieArcClasses,
-	pieClasses,
-} from "@mui/x-charts/PieChart";
+import { PieChart, type PieChartProps } from "@mui/x-charts/PieChart";
 import { useAtom } from "jotai";
 import { loadable } from "jotai/utils";
 import { useEffect, useMemo, useState } from "react";
-import { providerWithModelUsageAtom } from "@/atoms/provider-with-model-usage-atom";
+import { costByDomainAtom } from "@/atoms/cost-by-domain-atom";
 import styles from "@/components/dashboard/all-model-usage-pie-chart.module.css";
-import type { ProviderWithModelUsage } from "@/components/models/provider-with-model-usage";
+import type { CostByDomain } from "@/components/models/cost-by-domain";
 
-type ProviderName = "azureOpenAI" | "anthropic" | "stackit";
-
-type ModelNameMap = {
-	azureOpenAI: "gpt-5-nano" | "gpt-4o" | "gpt-4o-mini";
-	anthropic: "claude-sonnet-4" | "claude-3-7-sonnet";
-	stackit: "neuralmagic" | "google-gemma";
-};
-
-type ColorMap = {
-	[P in ProviderName]: {
-		provider: string;
-		models: Record<ModelNameMap[P], string>;
-	};
-};
-
-// High-contrast, distinctly different color palette for each provider and model
-const colorMap: ColorMap = {
-	azureOpenAI: {
-		provider: "#0066FF", // Vibrant Blue
-		models: {
-			"gpt-5-nano": "#00D4FF", // Cyan
-			"gpt-4o": "#0066FF", // Blue
-			"gpt-4o-mini": "#6B5CE7", // Purple-Blue
-		},
-	},
-	anthropic: {
-		provider: "#FF6B35", // Orange
-		models: {
-			"claude-sonnet-4": "#FF6B35", // Orange
-			"claude-3-7-sonnet": "#FFB800", // Gold/Yellow
-		},
-	},
-	stackit: {
-		provider: "#00C853", // Green
-		models: {
-			neuralmagic: "#00C853", // Green
-			"google-gemma": "#E91E63", // Pink/Magenta
-		},
-	},
-};
-
-// Fallback colors for unknown providers/models
-const fallbackColors = [
-	"#9C27B0", // Deep Purple
+// Color palette for domains
+const domainColors = [
+	"#0066FF", // Blue
+	"#FF6B35", // Orange
+	"#00C853", // Green
+	"#E91E63", // Pink
+	"#9C27B0", // Purple
 	"#00BCD4", // Teal
+	"#FFB800", // Gold
 	"#795548", // Brown
 	"#607D8B", // Blue Grey
 	"#FF5722", // Deep Orange
 	"#8BC34A", // Light Green
+	"#6B5CE7", // Purple-Blue
+	"#00D4FF", // Cyan
+	"#F44336", // Red
 ];
 
-let fallbackColorIndex = 0;
-const getFallbackColor = (): string => {
-	const color = fallbackColors[fallbackColorIndex % fallbackColors.length];
-	fallbackColorIndex++;
-	return color;
-};
-
-function createPieChartDataTest(data: ProviderWithModelUsage[]) {
-	const error: string[] = [];
-	fallbackColorIndex = 0; // Reset fallback index for each render
-
-	const innerData = data.map((providerEntry) => {
-		const providerColor = colorMap[providerEntry._id as ProviderName]?.provider;
-		if (!providerColor) {
-			error.push(`Unknown provider: '${providerEntry._id}'`);
-		}
-		return {
-			label: providerEntry._id,
-			value: providerEntry.totalTokenCount,
-			color: providerColor || getFallbackColor(),
-		};
+function formatCost(value: number): string {
+	return value.toLocaleString("de-DE", {
+		minimumFractionDigits: 2,
+		maximumFractionDigits: 2,
 	});
-	const outerData = data.flatMap((providerEntry) => {
-		const modelsMap = colorMap[providerEntry._id as ProviderName]?.models;
-		return providerEntry.models.map((model) => {
-			const modelColor = modelsMap?.[model.name as keyof typeof modelsMap];
-			if (!modelColor) {
-				error.push(
-					`Unknown model: '${model.name}' for provider '${providerEntry._id}'`,
-				);
-			}
-			const label =
-				providerEntry._id === "agents" && model.agentName
-					? `${model.agentName}`
-					: model.name;
-
-			return {
-				label,
-				value: model.tokenCount,
-				color: modelColor || getFallbackColor(),
-			};
-		});
-	});
-	return { innerData, outerData, error };
 }
 
-const loadableAtom = loadable(providerWithModelUsageAtom);
+function createPieChartData(data: CostByDomain[]) {
+	return data.map((entry, index) => ({
+		label: entry.domain,
+		value: entry.totalCost,
+		color: domainColors[index % domainColors.length],
+		percentage: entry.costPercentage,
+		userCount: entry.userCount,
+	}));
+}
 
-const AllModelUsagePieChart = () => {
-	const [providerData] = useAtom(loadableAtom);
+const loadableCostByDomainAtom = loadable(costByDomainAtom);
+
+const CostByDomainPieChart = () => {
+	const [domainData] = useAtom(loadableCostByDomainAtom);
 	const { mode } = useColorScheme();
 	const { vars } = useTheme();
 
@@ -125,32 +59,20 @@ const AllModelUsagePieChart = () => {
 	useEffect(() => setIsClient(true), []);
 
 	const chartData = useMemo(() => {
-		if (providerData.state === "hasData") {
-			return createPieChartDataTest(providerData.data);
-		} else {
-			return {
-				innerData: [],
-				outerData: [],
-				errors: [],
-			};
+		if (domainData.state === "hasData") {
+			return createPieChartData(domainData.data);
 		}
-	}, [providerData]);
+		return [];
+	}, [domainData]);
 
-	const hasData = chartData.innerData.length > 0;
+	const hasData = chartData.length > 0;
 
 	const settings: PieChartProps = {
 		series: [
 			{
-				innerRadius: 0,
-				outerRadius: 70,
-				data: chartData.innerData,
-				highlightScope: { fade: "global", highlight: "item" },
-			},
-			{
-				id: "outer",
-				innerRadius: 90,
+				innerRadius: 40,
 				outerRadius: 110,
-				data: chartData.outerData,
+				data: chartData,
 				highlightScope: { fade: "global", highlight: "item" },
 			},
 		],
@@ -175,10 +97,10 @@ const AllModelUsagePieChart = () => {
 					WebkitTextFillColor: "transparent",
 				}}
 			>
-				Token Usage per Model
+				Estimated Cost per Domain
 			</Typography>
 			<div className={styles.smallDisplayFix}>
-				{providerData.state === "loading" || !isClient ? (
+				{domainData.state === "loading" || !isClient ? (
 					<>
 						<div style={{ padding: "35px", marginTop: "20px" }}>
 							<Skeleton
@@ -214,7 +136,7 @@ const AllModelUsagePieChart = () => {
 							))}
 						</div>
 					</>
-				) : providerData.state === "hasError" ? (
+				) : domainData.state === "hasError" ? (
 					<Box
 						sx={{
 							display: "flex",
@@ -226,10 +148,10 @@ const AllModelUsagePieChart = () => {
 						}}
 					>
 						<Typography color={"error"} sx={{ opacity: 0.8 }}>
-							{String(providerData.error)}
+							{String(domainData.error)}
 						</Typography>
 					</Box>
-				) : providerData.state === "hasData" && !hasData ? (
+				) : domainData.state === "hasData" && !hasData ? (
 					<Box
 						sx={{
 							display: "flex",
@@ -255,9 +177,7 @@ const AllModelUsagePieChart = () => {
 								marginBottom: "16px",
 							}}
 						>
-							<Typography sx={{ fontSize: "48px", opacity: 0.3 }}>
-								📊
-							</Typography>
+							<AttachMoneyIcon sx={{ fontSize: "48px", opacity: 0.3 }} />
 						</Box>
 						<Typography
 							sx={{
@@ -266,23 +186,13 @@ const AllModelUsagePieChart = () => {
 								textAlign: "center",
 							}}
 						>
-							Keine Token-Daten für den gewählten Zeitraum
+							Keine Kostendaten für den gewählten Zeitraum
 						</Typography>
 					</Box>
-				) : providerData.state === "hasData" ? (
+				) : domainData.state === "hasData" ? (
 					<>
 						<div style={{ marginTop: "20px" }}>
-							<PieChart
-								{...settings}
-								width={300}
-								height={300}
-								sx={{
-									[`.${pieClasses.series}[data-series="outer"] .${pieArcClasses.root}`]:
-										{
-											opacity: 0.7,
-										},
-								}}
-							/>
+							<PieChart {...settings} width={300} height={300} />
 						</div>
 						<div
 							style={{
@@ -293,7 +203,7 @@ const AllModelUsagePieChart = () => {
 								padding: "8px",
 							}}
 						>
-							{chartData.innerData.map((item) => (
+							{chartData.map((item) => (
 								<div
 									key={item.label}
 									style={{
@@ -315,12 +225,36 @@ const AllModelUsagePieChart = () => {
 											height: 14,
 											backgroundColor: item.color,
 											marginRight: 10,
+											flexShrink: 0,
 											boxShadow: `0 2px 8px ${item.color}40`,
 										}}
 									/>
-									<Typography sx={{ fontSize: "14px", fontWeight: 500 }}>
-										{item.label}
-									</Typography>
+									<div style={{ minWidth: 0 }}>
+										<Typography
+											sx={{
+												fontSize: "14px",
+												fontWeight: 500,
+												whiteSpace: "nowrap",
+												overflow: "hidden",
+												textOverflow: "ellipsis",
+											}}
+										>
+											{item.label}
+										</Typography>
+										<Typography
+											sx={{
+												fontSize: "12px",
+												color:
+													mode === "dark"
+														? "rgba(255,255,255,0.5)"
+														: "rgba(0,0,0,0.5)",
+											}}
+										>
+											{formatCost(item.value)} € ({item.percentage.toFixed(1)}
+											%) · {item.userCount}{" "}
+											{item.userCount === 1 ? "User" : "Users"}
+										</Typography>
+									</div>
 								</div>
 							))}
 						</div>
@@ -331,4 +265,4 @@ const AllModelUsagePieChart = () => {
 	);
 };
 
-export default AllModelUsagePieChart;
+export default CostByDomainPieChart;

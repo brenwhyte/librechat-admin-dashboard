@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { buildCacheKey, withCache } from "@/lib/api/cache";
 import {
 	getDateParamsFromUrl,
 	validateDateRange,
@@ -13,7 +14,10 @@ export async function GET(request: Request) {
 			return validation.error;
 		}
 
-		const data = await getModelStatsTable(validation.data);
+		const cacheKey = buildCacheKey("all-models-stats-table", request);
+		const data = await withCache(cacheKey, () =>
+			getModelStatsTable(validation.data),
+		);
 		return NextResponse.json(data);
 	} catch (e) {
 		console.error("Error in all-models-stats-table API:", e);

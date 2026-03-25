@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { buildCacheKey, withCache } from "@/lib/api/cache";
 import { validateAndCalculatePeriod } from "@/lib/api/date-validation";
 import { getWebSearchStats } from "@/lib/db/repositories";
 
@@ -9,9 +10,10 @@ export async function GET(request: Request) {
 			return validation.error;
 		}
 
-		const periodData = validation.data;
-
-		const data = await getWebSearchStats(periodData);
+		const cacheKey = buildCacheKey("web-search-stats", request);
+		const data = await withCache(cacheKey, () =>
+			getWebSearchStats(validation.data),
+		);
 		return NextResponse.json(data);
 	} catch (e) {
 		console.error("Error in web-search-stats API:", e);

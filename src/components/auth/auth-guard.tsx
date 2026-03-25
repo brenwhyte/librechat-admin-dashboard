@@ -1,7 +1,6 @@
 "use client";
 
 import { Box, CircularProgress } from "@mui/material";
-import { useTheme } from "@mui/material/styles";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { API_BASE } from "@/lib/utils/api-base";
@@ -15,12 +14,17 @@ const PUBLIC_ROUTES = ["/login"];
 
 export default function AuthGuard({ children }: AuthGuardProps) {
 	const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
-	const { vars } = useTheme();
+	const [isClient, setIsClient] = useState(false);
 	const router = useRouter();
 	const pathname = usePathname();
 	const isRedirecting = useRef(false);
 
 	const isPublicRoute = PUBLIC_ROUTES.includes(pathname);
+
+	// Hydration guard: render nothing on the server, only show UI on the client
+	useEffect(() => {
+		setIsClient(true);
+	}, []);
 
 	// Reset redirecting flag when pathname changes
 	// biome-ignore lint/correctness/useExhaustiveDependencies: pathname is intentionally used as trigger
@@ -60,21 +64,10 @@ export default function AuthGuard({ children }: AuthGuardProps) {
 		}
 	}, [isAuthenticated, isPublicRoute, router]);
 
-	// Loading state
-	if (isAuthenticated === null) {
-		return (
-			<Box
-				sx={{
-					display: "flex",
-					justifyContent: "center",
-					alignItems: "center",
-					minHeight: "100vh",
-					backgroundColor: vars?.palette.background.default,
-				}}
-			>
-				<CircularProgress />
-			</Box>
-		);
+	// Server-side and initial client render: render nothing to avoid hydration mismatch
+	// (MUI's useColorScheme mode is undefined on server but resolved on client)
+	if (!isClient || isAuthenticated === null) {
+		return null;
 	}
 
 	// Show loading while redirecting
@@ -89,7 +82,6 @@ export default function AuthGuard({ children }: AuthGuardProps) {
 					justifyContent: "center",
 					alignItems: "center",
 					minHeight: "100vh",
-					backgroundColor: vars?.palette.background.default,
 				}}
 			>
 				<CircularProgress />

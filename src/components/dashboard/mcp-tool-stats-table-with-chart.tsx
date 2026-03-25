@@ -90,11 +90,13 @@ function Row({ row }: { row: McpToolStatsTableRow }) {
 	);
 }
 
+// Module-scope loadable atom (avoid re-creation on every render)
+const loadableMcpToolStatsAtom = loadable(mcpToolStatsTableAtom);
+
 const McpToolStatsTableWithChart: React.FC = () => {
 	const [searchTerm, setSearchTerm] = useState("");
 
 	// Data from state/atom
-	const loadableMcpToolStatsAtom = loadable(mcpToolStatsTableAtom);
 	const [tableData] = useAtom(loadableMcpToolStatsAtom);
 
 	// Hydration fix https://nextjs.org/docs/messages/react-hydration-error
