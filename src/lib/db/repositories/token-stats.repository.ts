@@ -31,93 +31,44 @@ export async function getTokenCounts(
 	const { startDate, endDate, prevStart, prevEnd } = params;
 	const collection = await getCollection(Collections.TRANSACTIONS);
 
-	const pipeline = [
+	// DocumentDB does not support $facet — run four parallel aggregations instead
+	const sumAbsRawAmount = [{ $group: { _id: null, total: { $sum: { $abs: "$rawAmount" } } } }];
+
+	const [currentInputResult, prevInputResult, currentOutputResult, prevOutputResult] = await Promise.all([
+		collection
+			.aggregate<{ total: number }>(
+				[{ $match: { createdAt: { $gte: startDate, $lte: endDate }, tokenType: "prompt" } }, ...sumAbsRawAmount],
+				{ maxTimeMS: QUERY_MAX_TIME_MS },
+			)
+			.toArray(),
+		collection
+			.aggregate<{ total: number }>(
+				[{ $match: { createdAt: { $gte: prevStart, $lte: prevEnd }, tokenType: "prompt" } }, ...sumAbsRawAmount],
+				{ maxTimeMS: QUERY_MAX_TIME_MS },
+			)
+			.toArray(),
+		collection
+			.aggregate<{ total: number }>(
+				[{ $match: { createdAt: { $gte: startDate, $lte: endDate }, tokenType: "completion" } }, ...sumAbsRawAmount],
+				{ maxTimeMS: QUERY_MAX_TIME_MS },
+			)
+			.toArray(),
+		collection
+			.aggregate<{ total: number }>(
+				[{ $match: { createdAt: { $gte: prevStart, $lte: prevEnd }, tokenType: "completion" } }, ...sumAbsRawAmount],
+				{ maxTimeMS: QUERY_MAX_TIME_MS },
+			)
+			.toArray(),
+	]);
+
+	return [
 		{
-			$facet: {
-				// Current period - Input tokens (prompt tokens sent to LLM)
-				currentInput: [
-					{
-						$match: {
-							createdAt: { $gte: startDate, $lte: endDate },
-							tokenType: "prompt",
-						},
-					},
-					{
-						$group: {
-							_id: null,
-							// rawAmount is negative for spending, so we use $abs
-							total: { $sum: { $abs: "$rawAmount" } },
-						},
-					},
-				],
-				// Previous period - Input tokens
-				prevInput: [
-					{
-						$match: {
-							createdAt: { $gte: prevStart, $lte: prevEnd },
-							tokenType: "prompt",
-						},
-					},
-					{
-						$group: {
-							_id: null,
-							total: { $sum: { $abs: "$rawAmount" } },
-						},
-					},
-				],
-				// Current period - Output tokens (completion tokens from LLM)
-				currentOutput: [
-					{
-						$match: {
-							createdAt: { $gte: startDate, $lte: endDate },
-							tokenType: "completion",
-						},
-					},
-					{
-						$group: {
-							_id: null,
-							total: { $sum: { $abs: "$rawAmount" } },
-						},
-					},
-				],
-				// Previous period - Output tokens
-				prevOutput: [
-					{
-						$match: {
-							createdAt: { $gte: prevStart, $lte: prevEnd },
-							tokenType: "completion",
-						},
-					},
-					{
-						$group: {
-							_id: null,
-							total: { $sum: { $abs: "$rawAmount" } },
-						},
-					},
-				],
-			},
-		},
-		{
-			$project: {
-				currentInputToken: {
-					$ifNull: [{ $arrayElemAt: ["$currentInput.total", 0] }, 0],
-				},
-				currentOutputToken: {
-					$ifNull: [{ $arrayElemAt: ["$currentOutput.total", 0] }, 0],
-				},
-				prevInputToken: {
-					$ifNull: [{ $arrayElemAt: ["$prevInput.total", 0] }, 0],
-				},
-				prevOutputToken: {
-					$ifNull: [{ $arrayElemAt: ["$prevOutput.total", 0] }, 0],
-				},
-			},
+			currentInputToken: currentInputResult[0]?.total ?? 0,
+			currentOutputToken: currentOutputResult[0]?.total ?? 0,
+			prevInputToken: prevInputResult[0]?.total ?? 0,
+			prevOutputToken: prevOutputResult[0]?.total ?? 0,
 		},
 	];
-
-	return collection
-		.aggregate<TokenCountResult>(pipeline, { maxTimeMS: QUERY_MAX_TIME_MS })
-		.toArray();
 }
 
 /**
@@ -129,63 +80,46 @@ export async function getMessageStats(
 	const { startDate, endDate, prevStart, prevEnd } = params;
 	const collection = await getCollection(Collections.MESSAGES);
 
-	const pipeline = [
+	// DocumentDB does not support $facet — run two parallel aggregations instead
+	const msgGroupStages = [
 		{
-			$facet: {
-				current: [
-					{ $match: { createdAt: { $gte: startDate, $lte: endDate } } },
-					{
-						$group: {
-							_id: null,
-							totalMessages: { $sum: 1 },
-							totalTokenCount: { $sum: "$tokenCount" },
-							totalSummaryTokenCount: { $sum: "$summaryTokenCount" },
-						},
-					},
-				],
-				prev: [
-					{ $match: { createdAt: { $gte: prevStart, $lte: prevEnd } } },
-					{
-						$group: {
-							_id: null,
-							totalMessages: { $sum: 1 },
-							totalTokenCount: { $sum: "$tokenCount" },
-							totalSummaryTokenCount: { $sum: "$summaryTokenCount" },
-						},
-					},
-				],
-			},
-		},
-		{
-			$project: {
-				totalMessages: {
-					$ifNull: [{ $arrayElemAt: ["$current.totalMessages", 0] }, 0],
-				},
-				totalTokenCount: {
-					$ifNull: [{ $arrayElemAt: ["$current.totalTokenCount", 0] }, 0],
-				},
-				totalSummaryTokenCount: {
-					$ifNull: [
-						{ $arrayElemAt: ["$current.totalSummaryTokenCount", 0] },
-						0,
-					],
-				},
-				prevTotalMessages: {
-					$ifNull: [{ $arrayElemAt: ["$prev.totalMessages", 0] }, 0],
-				},
-				prevTotalTokenCount: {
-					$ifNull: [{ $arrayElemAt: ["$prev.totalTokenCount", 0] }, 0],
-				},
-				prevTotalSummaryTokenCount: {
-					$ifNull: [{ $arrayElemAt: ["$prev.totalSummaryTokenCount", 0] }, 0],
-				},
+			$group: {
+				_id: null,
+				totalMessages: { $sum: 1 },
+				totalTokenCount: { $sum: "$tokenCount" },
+				totalSummaryTokenCount: { $sum: "$summaryTokenCount" },
 			},
 		},
 	];
 
-	return collection
-		.aggregate<MessageStatsResult>(pipeline, { maxTimeMS: QUERY_MAX_TIME_MS })
-		.toArray();
+	const [currentResult, prevResult] = await Promise.all([
+		collection
+			.aggregate<{ totalMessages: number; totalTokenCount: number; totalSummaryTokenCount: number }>(
+				[{ $match: { createdAt: { $gte: startDate, $lte: endDate } } }, ...msgGroupStages],
+				{ maxTimeMS: QUERY_MAX_TIME_MS },
+			)
+			.toArray(),
+		collection
+			.aggregate<{ totalMessages: number; totalTokenCount: number; totalSummaryTokenCount: number }>(
+				[{ $match: { createdAt: { $gte: prevStart, $lte: prevEnd } } }, ...msgGroupStages],
+				{ maxTimeMS: QUERY_MAX_TIME_MS },
+			)
+			.toArray(),
+	]);
+
+	const cur = currentResult[0];
+	const prev = prevResult[0];
+
+	return [
+		{
+			totalMessages: cur?.totalMessages ?? 0,
+			totalTokenCount: cur?.totalTokenCount ?? 0,
+			totalSummaryTokenCount: cur?.totalSummaryTokenCount ?? 0,
+			prevTotalMessages: prev?.totalMessages ?? 0,
+			prevTotalTokenCount: prev?.totalTokenCount ?? 0,
+			prevTotalSummaryTokenCount: prev?.totalSummaryTokenCount ?? 0,
+		},
+	];
 }
 
 /**

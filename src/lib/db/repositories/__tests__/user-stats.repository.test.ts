@@ -1,5 +1,8 @@
 /**
  * Tests for User Statistics Repository
+ *
+ * Updated to use parallel aggregations instead of $facet
+ * (DocumentDB compatibility fix).
  */
 
 import type { Collection, Db } from "mongodb";
@@ -43,13 +46,10 @@ describe("User Stats Repository", () => {
 
 	describe("getActiveUsers", () => {
 		it("should return active user counts for current and previous period", async () => {
-			const mockResult = [
-				{
-					currentActiveUsers: 150,
-					prevActiveUsers: 120,
-				},
-			];
-			mockToArray.mockResolvedValueOnce(mockResult);
+			// Two separate aggregate calls: current period, then previous period
+			mockToArray
+				.mockResolvedValueOnce([{ activeUserCount: 150 }])
+				.mockResolvedValueOnce([{ activeUserCount: 120 }]);
 
 			const params = {
 				startDate: new Date("2024-01-15"),
@@ -60,24 +60,14 @@ describe("User Stats Repository", () => {
 
 			const result = await getActiveUsers(params);
 
-			expect(result).toEqual(mockResult);
-			expect(mockAggregate).toHaveBeenCalledTimes(1);
-
-			// Verify pipeline structure
-			const pipeline = mockAggregate.mock.calls[0][0];
-			expect(pipeline).toHaveLength(2);
-			expect(pipeline[0]).toHaveProperty("$facet");
-			expect(pipeline[0].$facet).toHaveProperty("current");
-			expect(pipeline[0].$facet).toHaveProperty("prev");
+			expect(result).toEqual([{ currentActiveUsers: 150, prevActiveUsers: 120 }]);
+			expect(mockAggregate).toHaveBeenCalledTimes(2);
 		});
 
 		it("should handle zero active users", async () => {
-			mockToArray.mockResolvedValueOnce([
-				{
-					currentActiveUsers: 0,
-					prevActiveUsers: 0,
-				},
-			]);
+			mockToArray
+				.mockResolvedValueOnce([])
+				.mockResolvedValueOnce([]);
 
 			const params = {
 				startDate: new Date("2024-01-15"),
@@ -92,8 +82,10 @@ describe("User Stats Repository", () => {
 			expect(result[0].prevActiveUsers).toBe(0);
 		});
 
-		it("should use correct date filters", async () => {
-			mockToArray.mockResolvedValueOnce([]);
+		it("should use correct date filters for each period", async () => {
+			mockToArray
+				.mockResolvedValueOnce([])
+				.mockResolvedValueOnce([]);
 
 			const startDate = new Date("2024-02-01");
 			const endDate = new Date("2024-02-29");
@@ -102,18 +94,36 @@ describe("User Stats Repository", () => {
 
 			await getActiveUsers({ startDate, endDate, prevStart, prevEnd });
 
-			const pipeline = mockAggregate.mock.calls[0][0];
-			const facet = pipeline[0].$facet;
+			expect(mockAggregate).toHaveBeenCalledTimes(2);
 
-			// Check current period match
-			const currentMatch = facet.current[0].$match;
+			// First aggregate call = current period
+			const currentPipeline = mockAggregate.mock.calls[0][0];
+			const currentMatch = currentPipeline[0].$match;
 			expect(currentMatch.createdAt.$gte).toEqual(startDate);
 			expect(currentMatch.createdAt.$lte).toEqual(endDate);
 
-			// Check previous period match
-			const prevMatch = facet.prev[0].$match;
+			// Second aggregate call = previous period
+			const prevPipeline = mockAggregate.mock.calls[1][0];
+			const prevMatch = prevPipeline[0].$match;
 			expect(prevMatch.createdAt.$gte).toEqual(prevStart);
 			expect(prevMatch.createdAt.$lte).toEqual(prevEnd);
+		});
+
+		it("should group by user field to count unique active users", async () => {
+			mockToArray
+				.mockResolvedValueOnce([])
+				.mockResolvedValueOnce([]);
+
+			await getActiveUsers({
+				startDate: new Date("2024-01-15"),
+				endDate: new Date("2024-01-31"),
+				prevStart: new Date("2024-01-01"),
+				prevEnd: new Date("2024-01-15"),
+			});
+
+			const currentPipeline = mockAggregate.mock.calls[0][0];
+			expect(currentPipeline[1].$group._id).toBe("$user");
+			expect(currentPipeline[2].$count).toBe("activeUserCount");
 		});
 	});
 
@@ -138,13 +148,9 @@ describe("User Stats Repository", () => {
 
 	describe("getConversations", () => {
 		it("should return conversation counts for current and previous period", async () => {
-			const mockResult = [
-				{
-					currentConversations: 250,
-					prevConversations: 200,
-				},
-			];
-			mockToArray.mockResolvedValueOnce(mockResult);
+			mockToArray
+				.mockResolvedValueOnce([{ conversationCount: 250 }])
+				.mockResolvedValueOnce([{ conversationCount: 200 }]);
 
 			const params = {
 				startDate: new Date("2024-01-15"),
@@ -155,24 +161,14 @@ describe("User Stats Repository", () => {
 
 			const result = await getConversations(params);
 
-			expect(result).toEqual(mockResult);
-			expect(mockAggregate).toHaveBeenCalledTimes(1);
-
-			// Verify pipeline structure
-			const pipeline = mockAggregate.mock.calls[0][0];
-			expect(pipeline).toHaveLength(2);
-			expect(pipeline[0]).toHaveProperty("$facet");
-			expect(pipeline[0].$facet).toHaveProperty("current");
-			expect(pipeline[0].$facet).toHaveProperty("prev");
+			expect(result).toEqual([{ currentConversations: 250, prevConversations: 200 }]);
+			expect(mockAggregate).toHaveBeenCalledTimes(2);
 		});
 
 		it("should count unique conversationIds using group and count", async () => {
-			mockToArray.mockResolvedValueOnce([
-				{
-					currentConversations: 50,
-					prevConversations: 40,
-				},
-			]);
+			mockToArray
+				.mockResolvedValueOnce([])
+				.mockResolvedValueOnce([]);
 
 			const params = {
 				startDate: new Date("2024-01-15"),
@@ -183,27 +179,21 @@ describe("User Stats Repository", () => {
 
 			await getConversations(params);
 
-			const pipeline = mockAggregate.mock.calls[0][0];
-			const facet = pipeline[0].$facet;
-
-			// Verify current period groups by conversationId and then counts
-			const currentPipeline = facet.current;
+			// First call is current period — pipeline: [$match, $group, $count]
+			const currentPipeline = mockAggregate.mock.calls[0][0];
 			expect(currentPipeline[1].$group._id).toBe("$conversationId");
 			expect(currentPipeline[2].$count).toBe("conversationCount");
 
-			// Verify previous period groups by conversationId and then counts
-			const prevPipeline = facet.prev;
+			// Second call is previous period
+			const prevPipeline = mockAggregate.mock.calls[1][0];
 			expect(prevPipeline[1].$group._id).toBe("$conversationId");
 			expect(prevPipeline[2].$count).toBe("conversationCount");
 		});
 
 		it("should handle zero conversations", async () => {
-			mockToArray.mockResolvedValueOnce([
-				{
-					currentConversations: 0,
-					prevConversations: 0,
-				},
-			]);
+			mockToArray
+				.mockResolvedValueOnce([])
+				.mockResolvedValueOnce([]);
 
 			const params = {
 				startDate: new Date("2024-01-15"),

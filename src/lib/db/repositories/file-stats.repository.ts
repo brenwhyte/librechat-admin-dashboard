@@ -10,49 +10,33 @@ export async function getFilesProcessedStats(
 	const { startDate, endDate, prevStart, prevEnd } = params;
 	const collection = await getCollection(Collections.FILES);
 
-	const pipeline = [
-		{
-			$facet: {
-				current: [
-					{
-						$match: {
-							createdAt: { $gte: startDate, $lte: endDate },
-						},
-					},
-					{
-						$count: "total",
-					},
-				],
-				prev: [
-					{
-						$match: {
-							createdAt: { $gte: prevStart, $lte: prevEnd },
-						},
-					},
-					{
-						$count: "total",
-					},
-				],
-			},
-		},
-		{
-			$project: {
-				current: { $ifNull: [{ $arrayElemAt: ["$current.total", 0] }, 0] },
-				prev: { $ifNull: [{ $arrayElemAt: ["$prev.total", 0] }, 0] },
-			},
-		},
-	];
+	// DocumentDB does not support $facet — run two parallel aggregations instead
+	const [currentResult, prevResult] = await Promise.all([
+		collection
+			.aggregate<{ total: number }>(
+				[{ $match: { createdAt: { $gte: startDate, $lte: endDate } } }, { $count: "total" }],
+				{ maxTimeMS: QUERY_MAX_TIME_MS },
+			)
+			.toArray(),
+		collection
+			.aggregate<{ total: number }>(
+				[{ $match: { createdAt: { $gte: prevStart, $lte: prevEnd } } }, { $count: "total" }],
+				{ maxTimeMS: QUERY_MAX_TIME_MS },
+			)
+			.toArray(),
+	]);
 
-	const result = await collection
-		.aggregate(pipeline, { maxTimeMS: QUERY_MAX_TIME_MS })
-		.toArray();
+	const current = currentResult[0]?.total ?? 0;
+	const prev = prevResult[0]?.total ?? 0;
 
 	// Map to TokenCountResult structure to reuse existing types/components if possible,
 	// or just return simple object. Here we return a structure similar to other stats.
-	return result.map((r) => ({
-		currentInputToken: r.current, // abusing this field for "current count"
-		prevInputToken: r.prev, // abusing this field for "prev count"
-		currentOutputToken: 0,
-		prevOutputToken: 0,
-	}));
+	return [
+		{
+			currentInputToken: current, // abusing this field for "current count"
+			prevInputToken: prev, // abusing this field for "prev count"
+			currentOutputToken: 0,
+			prevOutputToken: 0,
+		},
+	];
 }

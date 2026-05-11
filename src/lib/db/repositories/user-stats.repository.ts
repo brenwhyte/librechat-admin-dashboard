@@ -20,36 +20,36 @@ export async function getActiveUsers(
 	const { startDate, endDate, prevStart, prevEnd } = params;
 	const collection = await getCollection(Collections.MESSAGES);
 
-	const pipeline = [
-		{
-			$facet: {
-				current: [
+	// DocumentDB does not support $facet — run two parallel aggregations instead
+	const [currentResult, prevResult] = await Promise.all([
+		collection
+			.aggregate<{ activeUserCount: number }>(
+				[
 					{ $match: { createdAt: { $gte: startDate, $lte: endDate } } },
 					{ $group: { _id: "$user" } },
 					{ $count: "activeUserCount" },
 				],
-				prev: [
+				{ maxTimeMS: QUERY_MAX_TIME_MS },
+			)
+			.toArray(),
+		collection
+			.aggregate<{ activeUserCount: number }>(
+				[
 					{ $match: { createdAt: { $gte: prevStart, $lte: prevEnd } } },
 					{ $group: { _id: "$user" } },
 					{ $count: "activeUserCount" },
 				],
-			},
-		},
+				{ maxTimeMS: QUERY_MAX_TIME_MS },
+			)
+			.toArray(),
+	]);
+
+	return [
 		{
-			$project: {
-				currentActiveUsers: {
-					$ifNull: [{ $arrayElemAt: ["$current.activeUserCount", 0] }, 0],
-				},
-				prevActiveUsers: {
-					$ifNull: [{ $arrayElemAt: ["$prev.activeUserCount", 0] }, 0],
-				},
-			},
+			currentActiveUsers: currentResult[0]?.activeUserCount ?? 0,
+			prevActiveUsers: prevResult[0]?.activeUserCount ?? 0,
 		},
 	];
-
-	return collection
-		.aggregate<ActiveUsersResult>(pipeline, { maxTimeMS: QUERY_MAX_TIME_MS })
-		.toArray();
 }
 
 /**
@@ -61,36 +61,36 @@ export async function getConversations(
 	const { startDate, endDate, prevStart, prevEnd } = params;
 	const collection = await getCollection(Collections.MESSAGES);
 
-	const pipeline = [
-		{
-			$facet: {
-				current: [
+	// DocumentDB does not support $facet — run two parallel aggregations instead
+	const [currentResult, prevResult] = await Promise.all([
+		collection
+			.aggregate<{ conversationCount: number }>(
+				[
 					{ $match: { createdAt: { $gte: startDate, $lte: endDate } } },
 					{ $group: { _id: "$conversationId" } },
 					{ $count: "conversationCount" },
 				],
-				prev: [
+				{ maxTimeMS: QUERY_MAX_TIME_MS },
+			)
+			.toArray(),
+		collection
+			.aggregate<{ conversationCount: number }>(
+				[
 					{ $match: { createdAt: { $gte: prevStart, $lte: prevEnd } } },
 					{ $group: { _id: "$conversationId" } },
 					{ $count: "conversationCount" },
 				],
-			},
-		},
+				{ maxTimeMS: QUERY_MAX_TIME_MS },
+			)
+			.toArray(),
+	]);
+
+	return [
 		{
-			$project: {
-				currentConversations: {
-					$ifNull: [{ $arrayElemAt: ["$current.conversationCount", 0] }, 0],
-				},
-				prevConversations: {
-					$ifNull: [{ $arrayElemAt: ["$prev.conversationCount", 0] }, 0],
-				},
-			},
+			currentConversations: currentResult[0]?.conversationCount ?? 0,
+			prevConversations: prevResult[0]?.conversationCount ?? 0,
 		},
 	];
-
-	return collection
-		.aggregate<ConversationsResult>(pipeline, { maxTimeMS: QUERY_MAX_TIME_MS })
-		.toArray();
 }
 
 /**

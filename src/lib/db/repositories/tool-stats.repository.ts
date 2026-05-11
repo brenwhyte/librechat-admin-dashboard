@@ -68,58 +68,41 @@ export async function getMcpToolCalls(
 	const { startDate, endDate, prevStart, prevEnd } = params;
 	const collection = await getCollection(Collections.MESSAGES);
 
-	const pipeline = [
-		{
-			$facet: {
-				current: [
-					{
-						$match: {
-							createdAt: { $gte: startDate, $lte: endDate },
-							"content.type": "tool_call",
-						},
-					},
-					{ $unwind: "$content" },
-					{ $match: { "content.type": "tool_call" } },
-					{
-						$match: {
-							"content.tool_call.name": { $regex: MCP_DELIMITER },
-						},
-					},
-					{ $count: "mcpToolCallCount" },
-				],
-				prev: [
-					{
-						$match: {
-							createdAt: { $gte: prevStart, $lte: prevEnd },
-							"content.type": "tool_call",
-						},
-					},
-					{ $unwind: "$content" },
-					{ $match: { "content.type": "tool_call" } },
-					{
-						$match: {
-							"content.tool_call.name": { $regex: MCP_DELIMITER },
-						},
-					},
-					{ $count: "mcpToolCallCount" },
-				],
-			},
-		},
-		{
-			$project: {
-				currentMcpToolCalls: {
-					$ifNull: [{ $arrayElemAt: ["$current.mcpToolCallCount", 0] }, 0],
-				},
-				prevMcpToolCalls: {
-					$ifNull: [{ $arrayElemAt: ["$prev.mcpToolCallCount", 0] }, 0],
-				},
-			},
-		},
+	// DocumentDB does not support $facet — run two parallel aggregations instead
+	const mcpMatchStages = [
+		{ $unwind: "$content" },
+		{ $match: { "content.type": "tool_call" } },
+		{ $match: { "content.tool_call.name": { $regex: MCP_DELIMITER } } },
+		{ $count: "mcpToolCallCount" },
 	];
 
-	return collection
-		.aggregate<McpToolCallsResult>(pipeline, { maxTimeMS: QUERY_MAX_TIME_MS })
-		.toArray();
+	const [currentResult, prevResult] = await Promise.all([
+		collection
+			.aggregate<{ mcpToolCallCount: number }>(
+				[
+					{ $match: { createdAt: { $gte: startDate, $lte: endDate }, "content.type": "tool_call" } },
+					...mcpMatchStages,
+				],
+				{ maxTimeMS: QUERY_MAX_TIME_MS },
+			)
+			.toArray(),
+		collection
+			.aggregate<{ mcpToolCallCount: number }>(
+				[
+					{ $match: { createdAt: { $gte: prevStart, $lte: prevEnd }, "content.type": "tool_call" } },
+					...mcpMatchStages,
+				],
+				{ maxTimeMS: QUERY_MAX_TIME_MS },
+			)
+			.toArray(),
+	]);
+
+	return [
+		{
+			currentMcpToolCalls: currentResult[0]?.mcpToolCallCount ?? 0,
+			prevMcpToolCalls: prevResult[0]?.mcpToolCallCount ?? 0,
+		},
+	];
 }
 
 /**
@@ -132,50 +115,40 @@ export async function getAllToolCalls(
 	const { startDate, endDate, prevStart, prevEnd } = params;
 	const collection = await getCollection(Collections.MESSAGES);
 
-	const pipeline = [
-		{
-			$facet: {
-				current: [
-					{
-						$match: {
-							createdAt: { $gte: startDate, $lte: endDate },
-							"content.type": "tool_call",
-						},
-					},
-					{ $unwind: "$content" },
-					{ $match: { "content.type": "tool_call" } },
-					{ $count: "toolCallCount" },
-				],
-				prev: [
-					{
-						$match: {
-							createdAt: { $gte: prevStart, $lte: prevEnd },
-							"content.type": "tool_call",
-						},
-					},
-					{ $unwind: "$content" },
-					{ $match: { "content.type": "tool_call" } },
-					{ $count: "toolCallCount" },
-				],
-			},
-		},
-		{
-			$project: {
-				currentToolCalls: {
-					$ifNull: [{ $arrayElemAt: ["$current.toolCallCount", 0] }, 0],
-				},
-				prevToolCalls: {
-					$ifNull: [{ $arrayElemAt: ["$prev.toolCallCount", 0] }, 0],
-				},
-			},
-		},
+	// DocumentDB does not support $facet — run two parallel aggregations instead
+	const toolMatchStages = [
+		{ $unwind: "$content" },
+		{ $match: { "content.type": "tool_call" } },
+		{ $count: "toolCallCount" },
 	];
 
-	return collection
-		.aggregate<{ currentToolCalls: number; prevToolCalls: number }>(pipeline, {
-			maxTimeMS: QUERY_MAX_TIME_MS,
-		})
-		.toArray();
+	const [currentResult, prevResult] = await Promise.all([
+		collection
+			.aggregate<{ toolCallCount: number }>(
+				[
+					{ $match: { createdAt: { $gte: startDate, $lte: endDate }, "content.type": "tool_call" } },
+					...toolMatchStages,
+				],
+				{ maxTimeMS: QUERY_MAX_TIME_MS },
+			)
+			.toArray(),
+		collection
+			.aggregate<{ toolCallCount: number }>(
+				[
+					{ $match: { createdAt: { $gte: prevStart, $lte: prevEnd }, "content.type": "tool_call" } },
+					...toolMatchStages,
+				],
+				{ maxTimeMS: QUERY_MAX_TIME_MS },
+			)
+			.toArray(),
+	]);
+
+	return [
+		{
+			currentToolCalls: currentResult[0]?.toolCallCount ?? 0,
+			prevToolCalls: prevResult[0]?.toolCallCount ?? 0,
+		},
+	];
 }
 
 /**
@@ -367,102 +340,52 @@ export async function getWebSearchStats(
 	const { startDate, endDate, prevStart, prevEnd } = params;
 	const collection = await getCollection(Collections.MESSAGES);
 
-	const pipeline = [
+	// DocumentDB does not support $facet — run two parallel aggregations instead
+	const webSearchStages = [
+		{ $unwind: "$content" },
+		{ $match: { "content.type": "tool_call" } },
+		{ $match: { "content.tool_call.name": { $regex: "web_search", $options: "i" } } },
 		{
-			$facet: {
-				current: [
-					{
-						$match: {
-							createdAt: { $gte: startDate, $lte: endDate },
-							"content.type": "tool_call",
-						},
-					},
-					{ $unwind: "$content" },
-					{ $match: { "content.type": "tool_call" } },
-					{
-						$match: {
-							"content.tool_call.name": { $regex: "web_search", $options: "i" },
-						},
-					},
-					{
-						$group: {
-							_id: null,
-							searchCount: { $sum: 1 },
-							uniqueUsers: { $addToSet: "$user" },
-							uniqueConversations: { $addToSet: "$conversationId" },
-						},
-					},
-					{
-						$project: {
-							_id: 0,
-							searchCount: 1,
-							uniqueUsers: { $size: "$uniqueUsers" },
-							uniqueConversations: { $size: "$uniqueConversations" },
-						},
-					},
-				],
-				prev: [
-					{
-						$match: {
-							createdAt: { $gte: prevStart, $lte: prevEnd },
-							"content.type": "tool_call",
-						},
-					},
-					{ $unwind: "$content" },
-					{ $match: { "content.type": "tool_call" } },
-					{
-						$match: {
-							"content.tool_call.name": { $regex: "web_search", $options: "i" },
-						},
-					},
-					{
-						$group: {
-							_id: null,
-							searchCount: { $sum: 1 },
-							uniqueUsers: { $addToSet: "$user" },
-							uniqueConversations: { $addToSet: "$conversationId" },
-						},
-					},
-					{
-						$project: {
-							_id: 0,
-							searchCount: 1,
-							uniqueUsers: { $size: "$uniqueUsers" },
-							uniqueConversations: { $size: "$uniqueConversations" },
-						},
-					},
-				],
-			},
-		},
-		{
-			$project: {
-				current: {
-					$ifNull: [
-						{ $arrayElemAt: ["$current", 0] },
-						{ searchCount: 0, uniqueUsers: 0, uniqueConversations: 0 },
-					],
-				},
-				prev: {
-					$ifNull: [
-						{ $arrayElemAt: ["$prev", 0] },
-						{ searchCount: 0, uniqueUsers: 0, uniqueConversations: 0 },
-					],
-				},
+			$group: {
+				_id: null,
+				searchCount: { $sum: 1 },
+				uniqueUsers: { $addToSet: "$user" },
+				uniqueConversations: { $addToSet: "$conversationId" },
 			},
 		},
 	];
 
-	const result = await collection
-		.aggregate<{ current: WebSearchStatsEntry; prev: WebSearchStatsEntry }>(
-			pipeline,
-			{ maxTimeMS: QUERY_MAX_TIME_MS },
-		)
-		.toArray();
+	const [currentRaw, prevRaw] = await Promise.all([
+		collection
+			.aggregate<{ _id: null; searchCount: number; uniqueUsers: unknown[]; uniqueConversations: unknown[] }>(
+				[
+					{ $match: { createdAt: { $gte: startDate, $lte: endDate }, "content.type": "tool_call" } },
+					...webSearchStages,
+				],
+				{ maxTimeMS: QUERY_MAX_TIME_MS },
+			)
+			.toArray(),
+		collection
+			.aggregate<{ _id: null; searchCount: number; uniqueUsers: unknown[]; uniqueConversations: unknown[] }>(
+				[
+					{ $match: { createdAt: { $gte: prevStart, $lte: prevEnd }, "content.type": "tool_call" } },
+					...webSearchStages,
+				],
+				{ maxTimeMS: QUERY_MAX_TIME_MS },
+			)
+			.toArray(),
+	]);
 
-	return (
-		result[0] ?? {
-			current: { searchCount: 0, uniqueUsers: 0, uniqueConversations: 0 },
-			prev: { searchCount: 0, uniqueUsers: 0, uniqueConversations: 0 },
-		}
-	);
+	const empty: WebSearchStatsEntry = { searchCount: 0, uniqueUsers: 0, uniqueConversations: 0 };
+	const toEntry = (
+		raw: { searchCount: number; uniqueUsers: unknown[]; uniqueConversations: unknown[] } | undefined,
+	): WebSearchStatsEntry =>
+		raw
+			? { searchCount: raw.searchCount, uniqueUsers: raw.uniqueUsers.length, uniqueConversations: raw.uniqueConversations.length }
+			: empty;
+
+	return {
+		current: toEntry(currentRaw[0]),
+		prev: toEntry(prevRaw[0]),
+	};
 }
