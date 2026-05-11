@@ -19,7 +19,7 @@ const TD_SYNNEX_URL =
  * Format a cost value as EUR with German locale
  */
 function formatCostEur(value: number): { short: string; full: string } {
-	const full = value.toLocaleString("de-DE", {
+	const full = value.toLocaleString("en-US", {
 		style: "currency",
 		currency: "EUR",
 		minimumFractionDigits: 2,
@@ -30,9 +30,9 @@ function formatCostEur(value: number): { short: string; full: string } {
 	let short: string;
 
 	if (absValue >= 1_000_000) {
-		short = `${(value / 1_000_000).toLocaleString("de-DE", { minimumFractionDigits: 1, maximumFractionDigits: 2 })} Mio. €`;
+		short = `${(value / 1_000_000).toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 2 })}M €`;
 	} else if (absValue >= 1_000) {
-		short = `${(value / 1_000).toLocaleString("de-DE", { minimumFractionDigits: 1, maximumFractionDigits: 2 })} Tsd. €`;
+		short = `${(value / 1_000).toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 2 })}K €`;
 	} else {
 		short = full;
 	}

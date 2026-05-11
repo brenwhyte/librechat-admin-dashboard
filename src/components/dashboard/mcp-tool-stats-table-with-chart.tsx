@@ -65,13 +65,13 @@ function Row({ row }: { row: McpToolStatsTableRow }) {
 				<TableCell>{row.toolName}</TableCell>
 				<TableCell>{row.serverName}</TableCell>
 				<TableCell align="right">
-					{row.callCount?.toLocaleString("de-DE")}
+					{row.callCount?.toLocaleString("en-US")}
 				</TableCell>
 				<TableCell align="right">
-					{row.uniqueUsers?.toLocaleString("de-DE")}
+					{row.uniqueUsers?.toLocaleString("en-US")}
 				</TableCell>
 				<TableCell align="right">
-					{row.uniqueConversations?.toLocaleString("de-DE")}
+					{row.uniqueConversations?.toLocaleString("en-US")}
 				</TableCell>
 			</TableRow>
 			<TableRow>

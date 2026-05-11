@@ -14,13 +14,19 @@ export async function getFilesProcessedStats(
 	const [currentResult, prevResult] = await Promise.all([
 		collection
 			.aggregate<{ total: number }>(
-				[{ $match: { createdAt: { $gte: startDate, $lte: endDate } } }, { $count: "total" }],
+				[
+					{ $match: { createdAt: { $gte: startDate, $lte: endDate } } },
+					{ $count: "total" },
+				],
 				{ maxTimeMS: QUERY_MAX_TIME_MS },
 			)
 			.toArray(),
 		collection
 			.aggregate<{ total: number }>(
-				[{ $match: { createdAt: { $gte: prevStart, $lte: prevEnd } } }, { $count: "total" }],
+				[
+					{ $match: { createdAt: { $gte: prevStart, $lte: prevEnd } } },
+					{ $count: "total" },
+				],
 				{ maxTimeMS: QUERY_MAX_TIME_MS },
 			)
 			.toArray(),

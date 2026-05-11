@@ -55,7 +55,7 @@ export function generateChartData<T extends TimeGroupedDataEntry>(
 	} else if (dayDiff <= 90) {
 		for (let i = 0; i <= dayDiff; i++) {
 			const slotTime = addDays(startDate, i);
-			const weekday = slotTime.toLocaleDateString("de-DE", {
+			const weekday = slotTime.toLocaleDateString("en-US", {
 				weekday: "short",
 			});
 			const dayStr = slotTime.getDate().toString().padStart(2, "0");

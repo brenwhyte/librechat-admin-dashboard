@@ -66,16 +66,16 @@ function Row({ row }: { row: AllAgentsStatsTableRow }) {
 				<TableCell>{row.agentName}</TableCell>
 				<TableCell>{row.model}</TableCell>
 				<TableCell align="right">
-					{row.totalRequests?.toLocaleString("de-DE")}
+					{row.totalRequests?.toLocaleString("en-US")}
 				</TableCell>
 				<TableCell align="right">
-					{row.totalTokens?.toLocaleString("de-DE")}
+					{row.totalTokens?.toLocaleString("en-US")}
 				</TableCell>
 				<TableCell align="right">
-					{row.totalInputToken?.toLocaleString("de-DE")}
+					{row.totalInputToken?.toLocaleString("en-US")}
 				</TableCell>
 				<TableCell align="right">
-					{row.totalOutputToken?.toLocaleString("de-DE")}
+					{row.totalOutputToken?.toLocaleString("en-US")}
 				</TableCell>
 			</TableRow>
 			<TableRow>

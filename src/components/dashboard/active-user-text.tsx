@@ -228,7 +228,7 @@ const ActiveUsersText = () => {
 							WebkitTextFillColor: "transparent",
 						}}
 					>
-						{data?.[0]?.currentActiveUsers?.toLocaleString?.("de-DE") ?? "--"}
+						{data?.[0]?.currentActiveUsers?.toLocaleString?.("en-US") ?? "--"}
 					</Typography>
 					{showTrend && trendValue !== null && trendValue !== 0 ? (
 						<Typography
@@ -250,7 +250,7 @@ const ActiveUsersText = () => {
 								<TrendingDownIcon sx={{ fontSize: "16px" }} />
 							)}
 							{trendValue > 0 ? "+" : ""}
-							{trendValue.toLocaleString("de-DE")} {trendLabel}
+							{trendValue.toLocaleString("en-US")} {trendLabel}
 						</Typography>
 					) : showTrend && trendValue === 0 ? (
 						<Typography

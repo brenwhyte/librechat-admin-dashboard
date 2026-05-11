@@ -80,7 +80,12 @@ export async function getMcpToolCalls(
 		collection
 			.aggregate<{ mcpToolCallCount: number }>(
 				[
-					{ $match: { createdAt: { $gte: startDate, $lte: endDate }, "content.type": "tool_call" } },
+					{
+						$match: {
+							createdAt: { $gte: startDate, $lte: endDate },
+							"content.type": "tool_call",
+						},
+					},
 					...mcpMatchStages,
 				],
 				{ maxTimeMS: QUERY_MAX_TIME_MS },
@@ -89,7 +94,12 @@ export async function getMcpToolCalls(
 		collection
 			.aggregate<{ mcpToolCallCount: number }>(
 				[
-					{ $match: { createdAt: { $gte: prevStart, $lte: prevEnd }, "content.type": "tool_call" } },
+					{
+						$match: {
+							createdAt: { $gte: prevStart, $lte: prevEnd },
+							"content.type": "tool_call",
+						},
+					},
 					...mcpMatchStages,
 				],
 				{ maxTimeMS: QUERY_MAX_TIME_MS },
@@ -126,7 +136,12 @@ export async function getAllToolCalls(
 		collection
 			.aggregate<{ toolCallCount: number }>(
 				[
-					{ $match: { createdAt: { $gte: startDate, $lte: endDate }, "content.type": "tool_call" } },
+					{
+						$match: {
+							createdAt: { $gte: startDate, $lte: endDate },
+							"content.type": "tool_call",
+						},
+					},
 					...toolMatchStages,
 				],
 				{ maxTimeMS: QUERY_MAX_TIME_MS },
@@ -135,7 +150,12 @@ export async function getAllToolCalls(
 		collection
 			.aggregate<{ toolCallCount: number }>(
 				[
-					{ $match: { createdAt: { $gte: prevStart, $lte: prevEnd }, "content.type": "tool_call" } },
+					{
+						$match: {
+							createdAt: { $gte: prevStart, $lte: prevEnd },
+							"content.type": "tool_call",
+						},
+					},
 					...toolMatchStages,
 				],
 				{ maxTimeMS: QUERY_MAX_TIME_MS },
@@ -344,7 +364,11 @@ export async function getWebSearchStats(
 	const webSearchStages = [
 		{ $unwind: "$content" },
 		{ $match: { "content.type": "tool_call" } },
-		{ $match: { "content.tool_call.name": { $regex: "web_search", $options: "i" } } },
+		{
+			$match: {
+				"content.tool_call.name": { $regex: "web_search", $options: "i" },
+			},
+		},
 		{
 			$group: {
 				_id: null,
@@ -357,18 +381,38 @@ export async function getWebSearchStats(
 
 	const [currentRaw, prevRaw] = await Promise.all([
 		collection
-			.aggregate<{ _id: null; searchCount: number; uniqueUsers: unknown[]; uniqueConversations: unknown[] }>(
+			.aggregate<{
+				_id: null;
+				searchCount: number;
+				uniqueUsers: unknown[];
+				uniqueConversations: unknown[];
+			}>(
 				[
-					{ $match: { createdAt: { $gte: startDate, $lte: endDate }, "content.type": "tool_call" } },
+					{
+						$match: {
+							createdAt: { $gte: startDate, $lte: endDate },
+							"content.type": "tool_call",
+						},
+					},
 					...webSearchStages,
 				],
 				{ maxTimeMS: QUERY_MAX_TIME_MS },
 			)
 			.toArray(),
 		collection
-			.aggregate<{ _id: null; searchCount: number; uniqueUsers: unknown[]; uniqueConversations: unknown[] }>(
+			.aggregate<{
+				_id: null;
+				searchCount: number;
+				uniqueUsers: unknown[];
+				uniqueConversations: unknown[];
+			}>(
 				[
-					{ $match: { createdAt: { $gte: prevStart, $lte: prevEnd }, "content.type": "tool_call" } },
+					{
+						$match: {
+							createdAt: { $gte: prevStart, $lte: prevEnd },
+							"content.type": "tool_call",
+						},
+					},
 					...webSearchStages,
 				],
 				{ maxTimeMS: QUERY_MAX_TIME_MS },
@@ -376,12 +420,26 @@ export async function getWebSearchStats(
 			.toArray(),
 	]);
 
-	const empty: WebSearchStatsEntry = { searchCount: 0, uniqueUsers: 0, uniqueConversations: 0 };
+	const empty: WebSearchStatsEntry = {
+		searchCount: 0,
+		uniqueUsers: 0,
+		uniqueConversations: 0,
+	};
 	const toEntry = (
-		raw: { searchCount: number; uniqueUsers: unknown[]; uniqueConversations: unknown[] } | undefined,
+		raw:
+			| {
+					searchCount: number;
+					uniqueUsers: unknown[];
+					uniqueConversations: unknown[];
+			  }
+			| undefined,
 	): WebSearchStatsEntry =>
 		raw
-			? { searchCount: raw.searchCount, uniqueUsers: raw.uniqueUsers.length, uniqueConversations: raw.uniqueConversations.length }
+			? {
+					searchCount: raw.searchCount,
+					uniqueUsers: raw.uniqueUsers.length,
+					uniqueConversations: raw.uniqueConversations.length,
+				}
 			: empty;
 
 	return {

@@ -139,7 +139,7 @@ const FilesProcessedText = () => {
 							WebkitTextFillColor: "transparent",
 						}}
 					>
-						{currentCount.toLocaleString("de-DE")}
+						{currentCount.toLocaleString("en-US")}
 					</Typography>
 					{showTrend && trendValue !== null && trendValue !== 0 ? (
 						<Typography
@@ -161,7 +161,7 @@ const FilesProcessedText = () => {
 								<TrendingDownIcon sx={{ fontSize: "16px" }} />
 							)}
 							{trendValue > 0 ? "+" : ""}
-							{trendValue.toLocaleString("de-DE")} {trendLabel}
+							{trendValue.toLocaleString("en-US")} {trendLabel}
 						</Typography>
 					) : showTrend && trendValue === 0 ? (
 						<Typography

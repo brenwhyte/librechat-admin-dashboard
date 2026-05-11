@@ -151,7 +151,7 @@ const WebSearchStatsText = () => {
 							WebkitTextFillColor: "transparent",
 						}}
 					>
-						{searchCount.toLocaleString("de-DE")}
+						{searchCount.toLocaleString("en-US")}
 					</Typography>
 					{showTrend && trendValue !== null && trendValue !== 0 ? (
 						<Typography
@@ -173,7 +173,7 @@ const WebSearchStatsText = () => {
 								<TrendingDownIcon sx={{ fontSize: "16px" }} />
 							)}
 							{trendValue > 0 ? "+" : ""}
-							{trendValue.toLocaleString("de-DE")}
+							{trendValue.toLocaleString("en-US")}
 						</Typography>
 					) : (
 						<Box sx={{ minHeight: "21px" }} />

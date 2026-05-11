@@ -32,30 +32,69 @@ export async function getTokenCounts(
 	const collection = await getCollection(Collections.TRANSACTIONS);
 
 	// DocumentDB does not support $facet — run four parallel aggregations instead
-	const sumAbsRawAmount = [{ $group: { _id: null, total: { $sum: { $abs: "$rawAmount" } } } }];
+	const sumAbsRawAmount = [
+		{ $group: { _id: null, total: { $sum: { $abs: "$rawAmount" } } } },
+	];
 
-	const [currentInputResult, prevInputResult, currentOutputResult, prevOutputResult] = await Promise.all([
+	const [
+		currentInputResult,
+		prevInputResult,
+		currentOutputResult,
+		prevOutputResult,
+	] = await Promise.all([
 		collection
 			.aggregate<{ total: number }>(
-				[{ $match: { createdAt: { $gte: startDate, $lte: endDate }, tokenType: "prompt" } }, ...sumAbsRawAmount],
+				[
+					{
+						$match: {
+							createdAt: { $gte: startDate, $lte: endDate },
+							tokenType: "prompt",
+						},
+					},
+					...sumAbsRawAmount,
+				],
 				{ maxTimeMS: QUERY_MAX_TIME_MS },
 			)
 			.toArray(),
 		collection
 			.aggregate<{ total: number }>(
-				[{ $match: { createdAt: { $gte: prevStart, $lte: prevEnd }, tokenType: "prompt" } }, ...sumAbsRawAmount],
+				[
+					{
+						$match: {
+							createdAt: { $gte: prevStart, $lte: prevEnd },
+							tokenType: "prompt",
+						},
+					},
+					...sumAbsRawAmount,
+				],
 				{ maxTimeMS: QUERY_MAX_TIME_MS },
 			)
 			.toArray(),
 		collection
 			.aggregate<{ total: number }>(
-				[{ $match: { createdAt: { $gte: startDate, $lte: endDate }, tokenType: "completion" } }, ...sumAbsRawAmount],
+				[
+					{
+						$match: {
+							createdAt: { $gte: startDate, $lte: endDate },
+							tokenType: "completion",
+						},
+					},
+					...sumAbsRawAmount,
+				],
 				{ maxTimeMS: QUERY_MAX_TIME_MS },
 			)
 			.toArray(),
 		collection
 			.aggregate<{ total: number }>(
-				[{ $match: { createdAt: { $gte: prevStart, $lte: prevEnd }, tokenType: "completion" } }, ...sumAbsRawAmount],
+				[
+					{
+						$match: {
+							createdAt: { $gte: prevStart, $lte: prevEnd },
+							tokenType: "completion",
+						},
+					},
+					...sumAbsRawAmount,
+				],
 				{ maxTimeMS: QUERY_MAX_TIME_MS },
 			)
 			.toArray(),
@@ -94,14 +133,28 @@ export async function getMessageStats(
 
 	const [currentResult, prevResult] = await Promise.all([
 		collection
-			.aggregate<{ totalMessages: number; totalTokenCount: number; totalSummaryTokenCount: number }>(
-				[{ $match: { createdAt: { $gte: startDate, $lte: endDate } } }, ...msgGroupStages],
+			.aggregate<{
+				totalMessages: number;
+				totalTokenCount: number;
+				totalSummaryTokenCount: number;
+			}>(
+				[
+					{ $match: { createdAt: { $gte: startDate, $lte: endDate } } },
+					...msgGroupStages,
+				],
 				{ maxTimeMS: QUERY_MAX_TIME_MS },
 			)
 			.toArray(),
 		collection
-			.aggregate<{ totalMessages: number; totalTokenCount: number; totalSummaryTokenCount: number }>(
-				[{ $match: { createdAt: { $gte: prevStart, $lte: prevEnd } } }, ...msgGroupStages],
+			.aggregate<{
+				totalMessages: number;
+				totalTokenCount: number;
+				totalSummaryTokenCount: number;
+			}>(
+				[
+					{ $match: { createdAt: { $gte: prevStart, $lte: prevEnd } } },
+					...msgGroupStages,
+				],
 				{ maxTimeMS: QUERY_MAX_TIME_MS },
 			)
 			.toArray(),

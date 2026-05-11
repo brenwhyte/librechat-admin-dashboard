@@ -4,7 +4,7 @@ import { DesktopDatePicker } from "@mui/x-date-pickers";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { endOfDay, startOfDay } from "date-fns";
-import { de } from "date-fns/locale";
+import { enUS } from "date-fns/locale";
 import { useAtom } from "jotai";
 import { datePickerIsOpenAtom } from "@/atoms/date-picker-action-atom";
 import { dateRangeAtom } from "@/atoms/date-range-atom";
@@ -50,7 +50,7 @@ export default function CustomDateRangePicker() {
 	};
 
 	return (
-		<LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={de}>
+		<LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={enUS}>
 			<Box
 				sx={{
 					display: "flex",

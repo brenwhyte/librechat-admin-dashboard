@@ -104,7 +104,7 @@ const TotalUsersText = () => {
 						{Array.isArray(data) &&
 						data[0] &&
 						data[0].totalUserCount !== undefined
-							? data[0].totalUserCount.toLocaleString("de-DE")
+							? data[0].totalUserCount.toLocaleString("en-US")
 							: "-"}
 					</Typography>
 					<Box sx={{ minHeight: "21px" }} />

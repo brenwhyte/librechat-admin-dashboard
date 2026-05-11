@@ -32,7 +32,7 @@ const domainColors = [
 ];
 
 function formatCost(value: number): string {
-	return value.toLocaleString("de-DE", {
+	return value.toLocaleString("en-US", {
 		minimumFractionDigits: 2,
 		maximumFractionDigits: 2,
 	});

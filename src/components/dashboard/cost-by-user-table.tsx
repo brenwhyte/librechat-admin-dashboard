@@ -44,7 +44,7 @@ const headCells: readonly HeadCell[] = [
 ];
 
 function formatCost(value: number): string {
-	return value.toLocaleString("de-DE", {
+	return value.toLocaleString("en-US", {
 		minimumFractionDigits: 2,
 		maximumFractionDigits: 2,
 	});
@@ -163,13 +163,13 @@ const CostByUserTable: React.FC = () => {
 										{formatCost(row.totalCost)} €
 									</TableCell>
 									<TableCell align="right">
-										{row.totalTokens.toLocaleString("de-DE")}
+										{row.totalTokens.toLocaleString("en-US")}
 									</TableCell>
 									<TableCell align="right">
-										{row.transactionCount.toLocaleString("de-DE")}
+										{row.transactionCount.toLocaleString("en-US")}
 									</TableCell>
 									<TableCell align="right">
-										{row.costPercentage.toLocaleString("de-DE", {
+										{row.costPercentage.toLocaleString("en-US", {
 											minimumFractionDigits: 1,
 											maximumFractionDigits: 1,
 										})}

@@ -236,7 +236,7 @@ const TotalRequestText = () => {
 							WebkitTextFillColor: "transparent",
 						}}
 					>
-						{totalRequests.toLocaleString("de-DE")}
+						{totalRequests.toLocaleString("en-US")}
 					</Typography>
 					{showTrend && trendValue !== null && trendValue !== 0 ? (
 						<Typography
@@ -258,7 +258,7 @@ const TotalRequestText = () => {
 								<TrendingDownIcon sx={{ fontSize: "16px" }} />
 							)}
 							{trendValue > 0 ? "+" : ""}
-							{trendValue.toLocaleString("de-DE")} {trendLabel}
+							{trendValue.toLocaleString("en-US")} {trendLabel}
 						</Typography>
 					) : showTrend && trendValue === 0 ? (
 						<Typography
