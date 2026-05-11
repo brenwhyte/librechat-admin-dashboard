@@ -57,9 +57,7 @@ describe("File Stats Repository", () => {
 		});
 
 		it("should handle empty periods returning zero counts", async () => {
-			mockToArray
-				.mockResolvedValueOnce([])
-				.mockResolvedValueOnce([]);
+			mockToArray.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
 
 			const params = {
 				startDate: new Date("2024-01-15"),
@@ -75,9 +73,7 @@ describe("File Stats Repository", () => {
 		});
 
 		it("should use correct date filters for each period", async () => {
-			mockToArray
-				.mockResolvedValueOnce([])
-				.mockResolvedValueOnce([]);
+			mockToArray.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
 
 			const startDate = new Date("2024-02-01");
 			const endDate = new Date("2024-02-29");
@@ -102,9 +98,7 @@ describe("File Stats Repository", () => {
 		});
 
 		it("should use $count stage to count documents", async () => {
-			mockToArray
-				.mockResolvedValueOnce([])
-				.mockResolvedValueOnce([]);
+			mockToArray.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
 
 			await getFilesProcessedStats({
 				startDate: new Date("2024-01-15"),

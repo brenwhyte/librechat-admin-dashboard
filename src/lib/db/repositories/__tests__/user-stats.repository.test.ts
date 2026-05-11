@@ -60,14 +60,14 @@ describe("User Stats Repository", () => {
 
 			const result = await getActiveUsers(params);
 
-			expect(result).toEqual([{ currentActiveUsers: 150, prevActiveUsers: 120 }]);
+			expect(result).toEqual([
+				{ currentActiveUsers: 150, prevActiveUsers: 120 },
+			]);
 			expect(mockAggregate).toHaveBeenCalledTimes(2);
 		});
 
 		it("should handle zero active users", async () => {
-			mockToArray
-				.mockResolvedValueOnce([])
-				.mockResolvedValueOnce([]);
+			mockToArray.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
 
 			const params = {
 				startDate: new Date("2024-01-15"),
@@ -83,9 +83,7 @@ describe("User Stats Repository", () => {
 		});
 
 		it("should use correct date filters for each period", async () => {
-			mockToArray
-				.mockResolvedValueOnce([])
-				.mockResolvedValueOnce([]);
+			mockToArray.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
 
 			const startDate = new Date("2024-02-01");
 			const endDate = new Date("2024-02-29");
@@ -110,9 +108,7 @@ describe("User Stats Repository", () => {
 		});
 
 		it("should group by user field to count unique active users", async () => {
-			mockToArray
-				.mockResolvedValueOnce([])
-				.mockResolvedValueOnce([]);
+			mockToArray.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
 
 			await getActiveUsers({
 				startDate: new Date("2024-01-15"),
@@ -161,14 +157,14 @@ describe("User Stats Repository", () => {
 
 			const result = await getConversations(params);
 
-			expect(result).toEqual([{ currentConversations: 250, prevConversations: 200 }]);
+			expect(result).toEqual([
+				{ currentConversations: 250, prevConversations: 200 },
+			]);
 			expect(mockAggregate).toHaveBeenCalledTimes(2);
 		});
 
 		it("should count unique conversationIds using group and count", async () => {
-			mockToArray
-				.mockResolvedValueOnce([])
-				.mockResolvedValueOnce([]);
+			mockToArray.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
 
 			const params = {
 				startDate: new Date("2024-01-15"),
@@ -191,9 +187,7 @@ describe("User Stats Repository", () => {
 		});
 
 		it("should handle zero conversations", async () => {
-			mockToArray
-				.mockResolvedValueOnce([])
-				.mockResolvedValueOnce([]);
+			mockToArray.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
 
 			const params = {
 				startDate: new Date("2024-01-15"),

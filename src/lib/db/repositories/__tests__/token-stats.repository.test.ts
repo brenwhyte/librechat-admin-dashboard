@@ -46,7 +46,7 @@ describe("Token Stats Repository", () => {
 			// 3. current output (completion), 4. prev output (completion)
 			mockToArray
 				.mockResolvedValueOnce([{ total: 10000 }]) // currentInput
-				.mockResolvedValueOnce([{ total: 8000 }])  // prevInput
+				.mockResolvedValueOnce([{ total: 8000 }]) // prevInput
 				.mockResolvedValueOnce([{ total: 50000 }]) // currentOutput
 				.mockResolvedValueOnce([{ total: 40000 }]); // prevOutput
 
@@ -161,8 +161,20 @@ describe("Token Stats Repository", () => {
 	describe("getMessageStats", () => {
 		it("should return message statistics for current and previous period", async () => {
 			mockToArray
-				.mockResolvedValueOnce([{ totalMessages: 1000, totalTokenCount: 5000, totalSummaryTokenCount: 200 }])
-				.mockResolvedValueOnce([{ totalMessages: 800, totalTokenCount: 4000, totalSummaryTokenCount: 150 }]);
+				.mockResolvedValueOnce([
+					{
+						totalMessages: 1000,
+						totalTokenCount: 5000,
+						totalSummaryTokenCount: 200,
+					},
+				])
+				.mockResolvedValueOnce([
+					{
+						totalMessages: 800,
+						totalTokenCount: 4000,
+						totalSummaryTokenCount: 150,
+					},
+				]);
 
 			const params = {
 				startDate: new Date("2024-01-15"),
@@ -187,9 +199,7 @@ describe("Token Stats Repository", () => {
 		});
 
 		it("should sum totalMessages, totalTokenCount, totalSummaryTokenCount", async () => {
-			mockToArray
-				.mockResolvedValueOnce([])
-				.mockResolvedValueOnce([]);
+			mockToArray.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
 
 			await getMessageStats({
 				startDate: new Date("2024-01-15"),
@@ -202,13 +212,13 @@ describe("Token Stats Repository", () => {
 			const groupStage = pipeline[1].$group;
 			expect(groupStage.totalMessages).toEqual({ $sum: 1 });
 			expect(groupStage.totalTokenCount).toEqual({ $sum: "$tokenCount" });
-			expect(groupStage.totalSummaryTokenCount).toEqual({ $sum: "$summaryTokenCount" });
+			expect(groupStage.totalSummaryTokenCount).toEqual({
+				$sum: "$summaryTokenCount",
+			});
 		});
 
 		it("should return zeros when no messages exist", async () => {
-			mockToArray
-				.mockResolvedValueOnce([])
-				.mockResolvedValueOnce([]);
+			mockToArray.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
 
 			const result = await getMessageStats({
 				startDate: new Date("2024-01-15"),

@@ -55,14 +55,14 @@ describe("Tool Stats Repository", () => {
 
 			const result = await getMcpToolCalls(params);
 
-			expect(result).toEqual([{ currentMcpToolCalls: 42, prevMcpToolCalls: 30 }]);
+			expect(result).toEqual([
+				{ currentMcpToolCalls: 42, prevMcpToolCalls: 30 },
+			]);
 			expect(mockAggregate).toHaveBeenCalledTimes(2);
 		});
 
 		it("should handle zero MCP tool calls", async () => {
-			mockToArray
-				.mockResolvedValueOnce([])
-				.mockResolvedValueOnce([]);
+			mockToArray.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
 
 			const params = {
 				startDate: new Date("2024-01-15"),
@@ -78,9 +78,7 @@ describe("Tool Stats Repository", () => {
 		});
 
 		it("should filter by tool_call.name MCP delimiter regex", async () => {
-			mockToArray
-				.mockResolvedValueOnce([])
-				.mockResolvedValueOnce([]);
+			mockToArray.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
 
 			await getMcpToolCalls({
 				startDate: new Date("2024-01-15"),
@@ -94,15 +92,14 @@ describe("Tool Stats Repository", () => {
 			const mcpMatchStage = currentPipeline.find(
 				(s: Record<string, unknown>) =>
 					s.$match &&
-					(s.$match as Record<string, unknown>)["content.tool_call.name"] !== undefined,
+					(s.$match as Record<string, unknown>)["content.tool_call.name"] !==
+						undefined,
 			);
 			expect(mcpMatchStage).toBeDefined();
 		});
 
 		it("should use correct date ranges for each period", async () => {
-			mockToArray
-				.mockResolvedValueOnce([])
-				.mockResolvedValueOnce([]);
+			mockToArray.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
 
 			const startDate = new Date("2024-02-01");
 			const endDate = new Date("2024-02-29");
@@ -141,9 +138,7 @@ describe("Tool Stats Repository", () => {
 		});
 
 		it("should handle zero tool calls", async () => {
-			mockToArray
-				.mockResolvedValueOnce([])
-				.mockResolvedValueOnce([]);
+			mockToArray.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
 
 			const result = await getAllToolCalls({
 				startDate: new Date("2024-01-15"),
@@ -160,8 +155,20 @@ describe("Tool Stats Repository", () => {
 	describe("getWebSearchStats", () => {
 		it("should return web search statistics for current and previous period", async () => {
 			mockToArray
-				.mockResolvedValueOnce([{ searchCount: 25, uniqueUsers: ["u1", "u2"], uniqueConversations: ["c1"] }])
-				.mockResolvedValueOnce([{ searchCount: 15, uniqueUsers: ["u1"], uniqueConversations: ["c1", "c2"] }]);
+				.mockResolvedValueOnce([
+					{
+						searchCount: 25,
+						uniqueUsers: ["u1", "u2"],
+						uniqueConversations: ["c1"],
+					},
+				])
+				.mockResolvedValueOnce([
+					{
+						searchCount: 15,
+						uniqueUsers: ["u1"],
+						uniqueConversations: ["c1", "c2"],
+					},
+				]);
 
 			const params = {
 				startDate: new Date("2024-01-15"),
@@ -182,9 +189,7 @@ describe("Tool Stats Repository", () => {
 		});
 
 		it("should return zeros when no web searches exist", async () => {
-			mockToArray
-				.mockResolvedValueOnce([])
-				.mockResolvedValueOnce([]);
+			mockToArray.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
 
 			const result = await getWebSearchStats({
 				startDate: new Date("2024-01-15"),
@@ -193,14 +198,20 @@ describe("Tool Stats Repository", () => {
 				prevEnd: new Date("2024-01-15"),
 			});
 
-			expect(result.current).toEqual({ searchCount: 0, uniqueUsers: 0, uniqueConversations: 0 });
-			expect(result.prev).toEqual({ searchCount: 0, uniqueUsers: 0, uniqueConversations: 0 });
+			expect(result.current).toEqual({
+				searchCount: 0,
+				uniqueUsers: 0,
+				uniqueConversations: 0,
+			});
+			expect(result.prev).toEqual({
+				searchCount: 0,
+				uniqueUsers: 0,
+				uniqueConversations: 0,
+			});
 		});
 
 		it("should filter by web_search regex in tool_call.name", async () => {
-			mockToArray
-				.mockResolvedValueOnce([])
-				.mockResolvedValueOnce([]);
+			mockToArray.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
 
 			await getWebSearchStats({
 				startDate: new Date("2024-01-15"),
@@ -213,9 +224,12 @@ describe("Tool Stats Repository", () => {
 			const webSearchMatch = currentPipeline.find(
 				(s: Record<string, unknown>) =>
 					s.$match &&
-					(s.$match as Record<string, unknown>)["content.tool_call.name"] !== undefined,
+					(s.$match as Record<string, unknown>)["content.tool_call.name"] !==
+						undefined,
 			);
-			expect(webSearchMatch.$match["content.tool_call.name"].$regex).toBe("web_search");
+			expect(webSearchMatch.$match["content.tool_call.name"].$regex).toBe(
+				"web_search",
+			);
 		});
 	});
 
