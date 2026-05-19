@@ -119,6 +119,20 @@ export interface TimeSeriesEntry {
 }
 
 /**
+ * Agent usage broken down by user
+ */
+export interface AgentUsageByUserEntry {
+	userId: string;
+	email: string;
+	name: string;
+	agentId: string;
+	agentName: string;
+	totalInputToken: number;
+	totalOutputToken: number;
+	requests: number;
+}
+
+/**
  * Aggregation granularity for time series data
  */
 export type TimeGranularity = "hour" | "day" | "month";

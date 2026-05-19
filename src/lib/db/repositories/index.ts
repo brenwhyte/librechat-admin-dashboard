@@ -3,6 +3,7 @@
  */
 
 export * from "./agent-stats.repository";
+export * from "./agent-usage-by-user.repository";
 export * from "./cost-stats.repository";
 export * from "./model-stats.repository";
 export * from "./token-stats.repository";

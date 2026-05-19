@@ -4,6 +4,7 @@ import { Box, Typography, useColorScheme } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import ActiveUsersText from "@/components/dashboard/active-user-text";
 import AgentCountText from "@/components/dashboard/agent-count-text";
+import AgentUsageByUserTableWithChart from "@/components/dashboard/agent-usage-by-user-table-with-chart";
 import AllAgentsStatsTableWithChart from "@/components/dashboard/all-agents-stats-table-with-chart";
 import AllModelStatsTableChartWithChart from "@/components/dashboard/all-model-stats-table-with-chart";
 import AllModelUsagePieChart from "@/components/dashboard/all-model-usage-pie-chart";
@@ -256,6 +257,16 @@ const DashboardPage = () => {
 							}}
 						>
 							<CostByUserTable />
+						</Box>
+						<Box
+							bgcolor={boardsBackgroundColor}
+							borderRadius={"20px"}
+							sx={{
+								...darkModeBorder,
+								marginTop: "40px",
+							}}
+						>
+							<AgentUsageByUserTableWithChart />
 						</Box>
 						<Box
 							sx={{
