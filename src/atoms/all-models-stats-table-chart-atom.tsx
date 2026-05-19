@@ -12,7 +12,10 @@ export const allModelsStatsTableChartAtom = atomFamily((model: string) =>
 		const res = await fetch(
 			`${API_BASE}/all-models-stats-table-chart?groupRange=${time}&model=${encodeURIComponent(model)}&start=${timeArea?.startDate?.toISOString()}&end=${timeArea?.endDate?.toISOString()}`,
 		);
+		if (!res.ok)
+			throw new Error(`all-models-stats-table-chart API error: ${res.status}`);
 		const data: AllModelsStatsChart[] = await res.json();
+		if (!Array.isArray(data)) return [];
 		return data;
 	}),
 );

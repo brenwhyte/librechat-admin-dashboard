@@ -17,7 +17,10 @@ export const agentUsageByUserChartAtom = atomFamily((key: string) =>
 		const res = await fetch(
 			`${API_BASE}/agent-usage-by-user-chart?userId=${encodeURIComponent(userId)}&agentId=${encodeURIComponent(agentId)}&groupRange=${time}&start=${timeArea?.startDate?.toISOString()}&end=${timeArea?.endDate?.toISOString()}`,
 		);
+		if (!res.ok)
+			throw new Error(`agent-usage-by-user-chart API error: ${res.status}`);
 		const data: AgentUsageByUserChart[] = await res.json();
+		if (!Array.isArray(data)) return [];
 		return data;
 	}),
 );

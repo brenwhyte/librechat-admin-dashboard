@@ -8,6 +8,9 @@ export const allModelsStatsTableAtom = atom(async (get) => {
 	const res = await fetch(
 		`${API_BASE}/all-models-stats-table?start=${timeArea?.startDate?.toISOString()}&end=${timeArea?.endDate?.toISOString()}`,
 	);
+	if (!res.ok)
+		throw new Error(`all-models-stats-table API error: ${res.status}`);
 	const data: AllModelsStatsTable[] = await res.json();
+	if (!Array.isArray(data)) return [];
 	return data;
 });
