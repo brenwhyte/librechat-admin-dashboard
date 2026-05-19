@@ -15,10 +15,10 @@
 import { ObjectId } from "mongodb";
 import { Collections, getCollection, QUERY_MAX_TIME_MS } from "../connection";
 import type {
-    AgentUsageByUserEntry,
-    DateRange,
-    TimeGranularity,
-    TimeSeriesEntry,
+	AgentUsageByUserEntry,
+	DateRange,
+	TimeGranularity,
+	TimeSeriesEntry,
 } from "../types";
 import { getAgentConversationIds, getAgentMap } from "./conversation-lookup";
 

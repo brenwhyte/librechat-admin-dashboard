@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { buildCacheKey, withCache } from "@/lib/api/cache";
 import {
-    getDateParamsFromUrl,
-    validateDateRange,
+	getDateParamsFromUrl,
+	validateDateRange,
 } from "@/lib/api/date-validation";
 import { getAgentUsageByUserTimeSeries } from "@/lib/db/repositories";
 import type { TimeGranularity } from "@/lib/db/types";
