@@ -1,10 +1,18 @@
 /**
  * Tests for Agent Statistics Repository
  *
- * Tests the flipped query direction:
- * 1. Find agent conversations first (via find)
- * 2. Query transactions ONLY for those conversationIds
- * 3. Batch-fetch agent metadata, join in JS
+ * Tests the optimized query direction:
+ * getAgentStatsTable:
+ *   1. distinct conversationIds from transactions in date range
+ *   2. fetch those conversations filtered to endpoint=agents
+ *   3. aggregate transactions for agent conversation IDs
+ *   4. batch-fetch agent metadata, join in JS
+ *
+ * getAgentTimeSeries:
+ *   1. findOne agent by name/id in agents collection
+ *   2. distinct conversationIds from transactions in date range
+ *   3. fetch conversations for that agent_id
+ *   4. aggregate transactions for those conversationIds
  */
 
 import type { Collection } from "mongodb";
@@ -14,11 +22,15 @@ const mockToArray = jest.fn();
 const mockAggregate = jest.fn().mockReturnValue({ toArray: mockToArray });
 const mockCountDocuments = jest.fn();
 const mockFind = jest.fn().mockReturnValue({ toArray: jest.fn() });
+const mockFindOne = jest.fn();
+const mockDistinct = jest.fn();
 
 const mockCollection: Partial<Collection> = {
 	aggregate: mockAggregate,
 	countDocuments: mockCountDocuments,
 	find: mockFind as unknown as Collection["find"],
+	findOne: mockFindOne as unknown as Collection["findOne"],
+	distinct: mockDistinct as unknown as Collection["distinct"],
 };
 
 // Mock the connection module
@@ -44,6 +56,8 @@ describe("Agent Stats Repository", () => {
 	beforeEach(() => {
 		jest.clearAllMocks();
 		mockFind.mockReturnValue({ toArray: jest.fn().mockResolvedValue([]) });
+		mockFindOne.mockResolvedValue(null);
+		mockDistinct.mockResolvedValue([]);
 	});
 
 	describe("getTotalAgentCount", () => {
@@ -66,10 +80,25 @@ describe("Agent Stats Repository", () => {
 	});
 
 	describe("getAgentStatsTable", () => {
+		it("should return empty array when no transactions in date range", async () => {
+			// distinct returns no conversationIds (no transactions in range)
+			mockDistinct.mockResolvedValue([]);
+
+			const result = await getAgentStatsTable({
+				startDate: new Date("2024-01-01"),
+				endDate: new Date("2024-01-31"),
+			});
+
+			expect(result).toHaveLength(0);
+		});
+
 		it("should return empty array when no agent conversations exist", async () => {
-			// getAgentConversationIds returns empty
-			const findToArray = jest.fn().mockResolvedValue([]);
-			mockFind.mockReturnValue({ toArray: findToArray });
+			// distinct returns some conversation IDs
+			mockDistinct.mockResolvedValue(["conv-1", "conv-2"]);
+			// but none of them are agent conversations
+			mockFind.mockReturnValue({
+				toArray: jest.fn().mockResolvedValue([]),
+			});
 
 			const result = await getAgentStatsTable({
 				startDate: new Date("2024-01-01"),
@@ -80,13 +109,15 @@ describe("Agent Stats Repository", () => {
 		});
 
 		it("should query conversations with endpoint agents filter", async () => {
+			mockDistinct.mockResolvedValue(["conv-1"]);
+
 			const findToArray = jest.fn();
 			mockFind.mockReturnValue({ toArray: findToArray });
-			// First call: getAgentConversationIds finds agent convos
+			// conversations query returns one agent conversation
 			findToArray.mockResolvedValueOnce([
 				{ conversationId: "conv-1", agent_id: "agent-1" },
 			]);
-			// Second call: getAgentMap
+			// agent metadata query returns agent doc
 			findToArray.mockResolvedValueOnce([
 				{
 					id: "agent-1",
@@ -95,7 +126,6 @@ describe("Agent Stats Repository", () => {
 					provider: "openAI",
 				},
 			]);
-			// Pre-group returns empty
 			mockToArray.mockResolvedValueOnce([]);
 
 			await getAgentStatsTable({
@@ -103,20 +133,21 @@ describe("Agent Stats Repository", () => {
 				endDate: new Date("2024-01-31"),
 			});
 
-			// First find call should filter by endpoint: "agents"
-			expect(mockFind).toHaveBeenCalled();
+			// First find call should filter by endpoint: "agents" and conversationId $in
 			const firstFindCall = mockFind.mock.calls[0];
-			expect(firstFindCall[0]).toEqual({ endpoint: "agents" });
+			expect(firstFindCall[0]).toMatchObject({ endpoint: "agents" });
+			expect(firstFindCall[0].conversationId.$in).toContain("conv-1");
 		});
 
 		it("should apply date filter and conversationId filter to transactions", async () => {
+			mockDistinct.mockResolvedValue(["conv-1", "conv-2"]);
+
 			const findToArray = jest.fn();
 			mockFind.mockReturnValue({ toArray: findToArray });
 			findToArray.mockResolvedValueOnce([
 				{ conversationId: "conv-1", agent_id: "agent-1" },
 				{ conversationId: "conv-2", agent_id: "agent-2" },
 			]);
-
 			mockToArray.mockResolvedValueOnce([]);
 
 			const startDate = new Date("2024-02-01");
@@ -124,10 +155,17 @@ describe("Agent Stats Repository", () => {
 
 			await getAgentStatsTable({ startDate, endDate });
 
+			// Verify distinct was called with date filter
+			expect(mockDistinct).toHaveBeenCalledWith(
+				"conversationId",
+				expect.objectContaining({
+					createdAt: { $gte: startDate, $lte: endDate },
+				}),
+			);
+
 			// Verify the aggregate pipeline filters by date AND conversationId $in
 			const pipeline = mockAggregate.mock.calls[0][0];
 			const matchStage = pipeline[0].$match;
-
 			expect(matchStage.createdAt.$gte).toEqual(startDate);
 			expect(matchStage.createdAt.$lte).toEqual(endDate);
 			expect(matchStage.conversationId.$in).toEqual(
@@ -136,12 +174,13 @@ describe("Agent Stats Repository", () => {
 		});
 
 		it("should use $abs for token amounts (LibreChat compatibility)", async () => {
+			mockDistinct.mockResolvedValue(["conv-1"]);
+
 			const findToArray = jest.fn();
 			mockFind.mockReturnValue({ toArray: findToArray });
 			findToArray.mockResolvedValueOnce([
 				{ conversationId: "conv-1", agent_id: "agent-1" },
 			]);
-
 			mockToArray.mockResolvedValueOnce([]);
 
 			await getAgentStatsTable({
@@ -159,9 +198,11 @@ describe("Agent Stats Repository", () => {
 		});
 
 		it("should correctly join agent metadata and split tokens", async () => {
+			mockDistinct.mockResolvedValue(["conv-1"]);
+
 			const findToArray = jest.fn();
 			mockFind.mockReturnValue({ toArray: findToArray });
-			// getAgentConversationIds
+			// conversations query
 			findToArray.mockResolvedValueOnce([
 				{ conversationId: "conv-1", agent_id: "agent-1" },
 			]);
@@ -188,7 +229,7 @@ describe("Agent Stats Repository", () => {
 				},
 			]);
 
-			// getAgentMap
+			// agent metadata
 			findToArray.mockResolvedValueOnce([
 				{
 					id: "agent-1",
@@ -213,8 +254,11 @@ describe("Agent Stats Repository", () => {
 		});
 
 		it("should fall back to agent_id when agent not found", async () => {
+			mockDistinct.mockResolvedValue(["conv-1"]);
+
 			const findToArray = jest.fn();
 			mockFind.mockReturnValue({ toArray: findToArray });
+			// conversations query
 			findToArray.mockResolvedValueOnce([
 				{ conversationId: "conv-1", agent_id: "agent-123" },
 			]);
@@ -244,9 +288,45 @@ describe("Agent Stats Repository", () => {
 	});
 
 	describe("getAgentTimeSeries", () => {
+		it("should return empty array when agent is not found", async () => {
+			mockFindOne.mockResolvedValue(null);
+
+			const result = await getAgentTimeSeries({
+				startDate: new Date("2024-01-01"),
+				endDate: new Date("2024-01-31"),
+				agentName: "Test Agent",
+				granularity: "day",
+			});
+
+			expect(result).toHaveLength(0);
+		});
+
+		it("should return empty array when no transactions in date range", async () => {
+			mockFindOne.mockResolvedValue({
+				id: "agent-1",
+				name: "Test Agent",
+				provider: "openAI",
+			});
+			mockDistinct.mockResolvedValue([]);
+
+			const result = await getAgentTimeSeries({
+				startDate: new Date("2024-01-01"),
+				endDate: new Date("2024-01-31"),
+				agentName: "Test Agent",
+				granularity: "day",
+			});
+
+			expect(result).toHaveLength(0);
+		});
+
 		it("should return empty array when no agent conversations exist", async () => {
-			const findToArray = jest.fn().mockResolvedValue([]);
-			mockFind.mockReturnValue({ toArray: findToArray });
+			mockFindOne.mockResolvedValue({
+				id: "agent-1",
+				name: "Test Agent",
+				provider: "openAI",
+			});
+			mockDistinct.mockResolvedValue(["conv-x"]);
+			mockFind.mockReturnValue({ toArray: jest.fn().mockResolvedValue([]) });
 
 			const result = await getAgentTimeSeries({
 				startDate: new Date("2024-01-01"),
@@ -259,30 +339,20 @@ describe("Agent Stats Repository", () => {
 		});
 
 		it("should filter transactions to only the target agent's conversations", async () => {
+			mockFindOne.mockResolvedValue({
+				id: "agent-1",
+				name: "Target Agent",
+				provider: "openAI",
+			});
+			// transactions in date range span two agents' conversations
+			mockDistinct.mockResolvedValue(["conv-1", "conv-2", "conv-3"]);
+
 			const findToArray = jest.fn();
 			mockFind.mockReturnValue({ toArray: findToArray });
-
-			// getAgentConversationIds - multiple agents
+			// conversations query returns only agent-1's conversations
 			findToArray.mockResolvedValueOnce([
-				{ conversationId: "conv-1", agent_id: "agent-1" },
-				{ conversationId: "conv-2", agent_id: "agent-1" },
-				{ conversationId: "conv-3", agent_id: "agent-2" },
-			]);
-
-			// getAgentMap
-			findToArray.mockResolvedValueOnce([
-				{
-					id: "agent-1",
-					name: "Target Agent",
-					model: "gpt-4",
-					provider: "openAI",
-				},
-				{
-					id: "agent-2",
-					name: "Other Agent",
-					model: "claude-3",
-					provider: "anthropic",
-				},
+				{ conversationId: "conv-1" },
+				{ conversationId: "conv-2" },
 			]);
 
 			mockToArray.mockResolvedValueOnce([]);
@@ -294,7 +364,14 @@ describe("Agent Stats Repository", () => {
 				granularity: "day",
 			});
 
-			// Should only query transactions for conv-1 and conv-2 (agent-1's convos)
+			// Conversation find should filter by agent_id
+			const convFindCall = mockFind.mock.calls[0];
+			expect(convFindCall[0]).toMatchObject({
+				endpoint: "agents",
+				agent_id: "agent-1",
+			});
+
+			// Aggregate should only query conv-1 and conv-2
 			const pipeline = mockAggregate.mock.calls[0][0];
 			const matchStage = pipeline[0].$match;
 			expect(matchStage.conversationId.$in).toEqual(
@@ -304,20 +381,15 @@ describe("Agent Stats Repository", () => {
 		});
 
 		it("should use correct date format for daily granularity", async () => {
-			const findToArray = jest.fn();
-			mockFind.mockReturnValue({ toArray: findToArray });
-			findToArray.mockResolvedValueOnce([
-				{ conversationId: "conv-1", agent_id: "agent-1" },
-			]);
-			findToArray.mockResolvedValueOnce([
-				{
-					id: "agent-1",
-					name: "Test Agent",
-					model: "gpt-4",
-					provider: "openAI",
-				},
-			]);
-
+			mockFindOne.mockResolvedValue({
+				id: "agent-1",
+				name: "Test Agent",
+				provider: "openAI",
+			});
+			mockDistinct.mockResolvedValue(["conv-1"]);
+			mockFind.mockReturnValue({
+				toArray: jest.fn().mockResolvedValue([{ conversationId: "conv-1" }]),
+			});
 			mockToArray.mockResolvedValueOnce([]);
 
 			await getAgentTimeSeries({
@@ -338,20 +410,15 @@ describe("Agent Stats Repository", () => {
 		});
 
 		it("should apply timezone for date formatting", async () => {
-			const findToArray = jest.fn();
-			mockFind.mockReturnValue({ toArray: findToArray });
-			findToArray.mockResolvedValueOnce([
-				{ conversationId: "conv-1", agent_id: "agent-1" },
-			]);
-			findToArray.mockResolvedValueOnce([
-				{
-					id: "agent-1",
-					name: "Test Agent",
-					model: "gpt-4",
-					provider: "openAI",
-				},
-			]);
-
+			mockFindOne.mockResolvedValue({
+				id: "agent-1",
+				name: "Test Agent",
+				provider: "openAI",
+			});
+			mockDistinct.mockResolvedValue(["conv-1"]);
+			mockFind.mockReturnValue({
+				toArray: jest.fn().mockResolvedValue([{ conversationId: "conv-1" }]),
+			});
 			mockToArray.mockResolvedValueOnce([]);
 
 			await getAgentTimeSeries({
@@ -372,20 +439,15 @@ describe("Agent Stats Repository", () => {
 		});
 
 		it("should default timezone to UTC", async () => {
-			const findToArray = jest.fn();
-			mockFind.mockReturnValue({ toArray: findToArray });
-			findToArray.mockResolvedValueOnce([
-				{ conversationId: "conv-1", agent_id: "agent-1" },
-			]);
-			findToArray.mockResolvedValueOnce([
-				{
-					id: "agent-1",
-					name: "Test Agent",
-					model: "gpt-4",
-					provider: "openAI",
-				},
-			]);
-
+			mockFindOne.mockResolvedValue({
+				id: "agent-1",
+				name: "Test Agent",
+				provider: "openAI",
+			});
+			mockDistinct.mockResolvedValue(["conv-1"]);
+			mockFind.mockReturnValue({
+				toArray: jest.fn().mockResolvedValue([{ conversationId: "conv-1" }]),
+			});
 			mockToArray.mockResolvedValueOnce([]);
 
 			await getAgentTimeSeries({
@@ -405,19 +467,15 @@ describe("Agent Stats Repository", () => {
 		});
 
 		it("should sort results by time bucket ascending", async () => {
-			const findToArray = jest.fn();
-			mockFind.mockReturnValue({ toArray: findToArray });
-			findToArray.mockResolvedValueOnce([
-				{ conversationId: "conv-1", agent_id: "agent-1" },
-			]);
-			findToArray.mockResolvedValueOnce([
-				{
-					id: "agent-1",
-					name: "Test Agent",
-					model: "gpt-4",
-					provider: "openAI",
-				},
-			]);
+			mockFindOne.mockResolvedValue({
+				id: "agent-1",
+				name: "Test Agent",
+				provider: "openAI",
+			});
+			mockDistinct.mockResolvedValue(["conv-1"]);
+			mockFind.mockReturnValue({
+				toArray: jest.fn().mockResolvedValue([{ conversationId: "conv-1" }]),
+			});
 
 			// Pre-grouped data in unsorted order
 			mockToArray.mockResolvedValueOnce([
@@ -445,22 +503,13 @@ describe("Agent Stats Repository", () => {
 			expect(result[1].day).toBe("2024-01-20");
 		});
 
-		it("should match by agent_id when agent name doesnt match", async () => {
-			const findToArray = jest.fn();
-			mockFind.mockReturnValue({ toArray: findToArray });
-			findToArray.mockResolvedValueOnce([
-				{ conversationId: "conv-1", agent_id: "agent-id-123" },
-			]);
-			findToArray.mockResolvedValueOnce([
-				{
-					id: "agent-id-123",
-					name: "Different Name",
-					model: "gpt-4",
-					provider: "openAI",
-				},
-			]);
-
-			mockToArray.mockResolvedValueOnce([]);
+		it("should look up agent by id when agentName matches id format", async () => {
+			mockFindOne.mockResolvedValue({
+				id: "agent-id-123",
+				name: "Different Name",
+				provider: "openAI",
+			});
+			mockDistinct.mockResolvedValue([]);
 
 			// Searching by agent_id directly
 			const result = await getAgentTimeSeries({
@@ -470,8 +519,17 @@ describe("Agent Stats Repository", () => {
 				granularity: "day",
 			});
 
-			// Should find the agent by ID match
-			expect(result).toHaveLength(0); // No transactions, but should not error
+			// findOne should be called with $or matching name or id
+			expect(mockFindOne).toHaveBeenCalledWith(
+				expect.objectContaining({
+					$or: expect.arrayContaining([
+						{ name: "agent-id-123" },
+						{ id: "agent-id-123" },
+					]),
+				}),
+				expect.any(Object),
+			);
+			expect(result).toHaveLength(0); // No transactions
 		});
 	});
 });

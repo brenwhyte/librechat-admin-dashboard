@@ -17,8 +17,8 @@ interface CacheEntry<T> {
 
 const cache = new Map<string, CacheEntry<unknown>>();
 
-/** Default TTL: 30 seconds */
-const DEFAULT_TTL_MS = 30_000;
+/** Default TTL: 5 minutes — dashboard data is historical and doesn't change second-to-second */
+const DEFAULT_TTL_MS = 5 * 60_000;
 
 /** Max cache entries to prevent unbounded memory growth */
 const MAX_CACHE_SIZE = 200;

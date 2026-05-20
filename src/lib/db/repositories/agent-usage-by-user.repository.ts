@@ -3,13 +3,9 @@
  *
  * Provides per-user breakdowns of agent usage.
  *
- * APPROACH: Three-phase approach combining patterns from:
- * - agent-stats.repository.ts  (agent conversation pre-filtering)
- * - cost-stats.repository.ts   (user batch-fetch pattern)
- *
- * Phase 1: getAgentConversationIds() → all conversationIds that are agent conversations
- * Phase 2: Query transactions grouped by {user, conversationId, tokenType} filtered to those convIds
- * Phase 3: Batch-fetch agent metadata + user metadata, join in JS
+ * APPROACH: Start from date-filtered transactions → look up which conversations are agent
+ * conversations → aggregate tokens per user+agent. Avoids fetching all agent conversations
+ * ever (which caused timeout with large datasets).
  */
 
 import { ObjectId } from "mongodb";
@@ -20,7 +16,7 @@ import type {
 	TimeGranularity,
 	TimeSeriesEntry,
 } from "../types";
-import { getAgentConversationIds, getAgentMap } from "./conversation-lookup";
+import { getAgentMap } from "./conversation-lookup";
 
 /** Shape returned by Phase 2 aggregation */
 interface UserConvAggregation {
@@ -50,25 +46,62 @@ const DATE_FORMATS: Record<TimeGranularity, string> = {
  * Get agent usage statistics broken down by user.
  *
  * Returns one entry per unique user+agent combination within the date range.
+ *
+ * QUERY STRATEGY: Start from date-filtered transactions to avoid fetching all
+ * agent conversations ever (which creates a huge $in array and causes timeouts).
+ *
+ * Phase 1: Distinct conversationIds from transactions in date range
+ * Phase 2: Fetch those conversations filtered to endpoint="agents" → agentId map
+ * Phase 3: Aggregate transactions filtered to agent conversationIds in date range
+ * Phase 4: Batch-fetch agent + user metadata, in-memory join
  */
 export async function getAgentUsageByUser(
 	params: DateRange,
 ): Promise<AgentUsageByUserEntry[]> {
 	const { startDate, endDate } = params;
 
-	// Phase 1: Get all agent conversation IDs and their agent_id mapping
-	const { conversationIds, agentIdByConversation } =
-		await getAgentConversationIds();
-
-	if (conversationIds.length === 0) return [];
-
-	// Phase 2: Query transactions grouped by {user, conversationId, tokenType}
 	const transactionsCol = await getCollection(Collections.TRANSACTIONS);
+
+	// Phase 1: Get distinct conversationIds from transactions in date range
+	const distinctConvIds = await transactionsCol
+		.distinct("conversationId", {
+			createdAt: { $gte: startDate, $lte: endDate },
+		})
+		.then((ids) => ids.filter(Boolean) as string[]);
+
+	if (distinctConvIds.length === 0) return [];
+
+	// Phase 2: Fetch only those conversations that are agent conversations
+	const conversationsCol = await getCollection(Collections.CONVERSATIONS);
+	const agentConvDocs = await conversationsCol
+		.find(
+			{ conversationId: { $in: distinctConvIds }, endpoint: "agents" },
+			{
+				projection: { conversationId: 1, agent_id: 1, _id: 0 },
+				maxTimeMS: QUERY_MAX_TIME_MS,
+			},
+		)
+		.toArray();
+
+	if (agentConvDocs.length === 0) return [];
+
+	const agentConversationIds: string[] = [];
+	const agentIdByConversation = new Map<string, string>();
+	for (const doc of agentConvDocs) {
+		const d = doc as Record<string, unknown>;
+		const convId = d.conversationId as string;
+		agentConversationIds.push(convId);
+		if (d.agent_id) {
+			agentIdByConversation.set(convId, d.agent_id as string);
+		}
+	}
+
+	// Phase 3: Aggregate transactions grouped by {user, conversationId, tokenType}
 	const pipeline = [
 		{
 			$match: {
 				createdAt: { $gte: startDate, $lte: endDate },
-				conversationId: { $in: conversationIds },
+				conversationId: { $in: agentConversationIds },
 			},
 		},
 		{
@@ -90,11 +123,11 @@ export async function getAgentUsageByUser(
 
 	if (aggregated.length === 0) return [];
 
-	// Phase 3a: Batch-fetch agent metadata
+	// Phase 4a: Batch-fetch agent metadata
 	const uniqueAgentIds = [...new Set(agentIdByConversation.values())];
 	const agentMap = await getAgentMap(uniqueAgentIds);
 
-	// Phase 3b: Batch-fetch user metadata
+	// Phase 4b: Batch-fetch user metadata
 	const uniqueUserIds = [
 		...new Set(aggregated.map((r) => r._id.user).filter(Boolean)),
 	];
@@ -118,7 +151,7 @@ export async function getAgentUsageByUser(
 		});
 	}
 
-	// Phase 4: In-memory join — group by {userId, agentId}
+	// Phase 5: In-memory join — group by {userId, agentId}
 	const statsMap = new Map<
 		string,
 		{
@@ -194,19 +227,7 @@ export async function getAgentUsageByUserTimeSeries(
 	const dateFormat = DATE_FORMATS[granularity];
 	const timeField = granularity;
 
-	// Phase 1: Get agent conversations and filter to the requested agentId
-	const { conversationIds, agentIdByConversation } =
-		await getAgentConversationIds();
-
-	if (conversationIds.length === 0) return [];
-
-	const targetConvIds = conversationIds.filter(
-		(convId) => agentIdByConversation.get(convId) === agentId,
-	);
-
-	if (targetConvIds.length === 0) return [];
-
-	// Phase 2: Query transactions for this user + agent's conversations
+	// Phase 1: Get distinct conversationIds for this user in the date range
 	const transactionsCol = await getCollection(Collections.TRANSACTIONS);
 
 	let userObjectId: ObjectId;
@@ -216,6 +237,38 @@ export async function getAgentUsageByUserTimeSeries(
 		return [];
 	}
 
+	const distinctConvIds = await transactionsCol
+		.distinct("conversationId", {
+			createdAt: { $gte: startDate, $lte: endDate },
+			user: userObjectId,
+		})
+		.then((ids) => ids.filter(Boolean) as string[]);
+
+	if (distinctConvIds.length === 0) return [];
+
+	// Phase 2: Fetch conversations for this user in the date range that belong to the target agent
+	const conversationsCol = await getCollection(Collections.CONVERSATIONS);
+	const agentConvDocs = await conversationsCol
+		.find(
+			{
+				conversationId: { $in: distinctConvIds },
+				endpoint: "agents",
+				agent_id: agentId,
+			},
+			{
+				projection: { conversationId: 1, _id: 0 },
+				maxTimeMS: QUERY_MAX_TIME_MS,
+			},
+		)
+		.toArray();
+
+	if (agentConvDocs.length === 0) return [];
+
+	const targetConvIds = agentConvDocs.map(
+		(d) => (d as Record<string, unknown>).conversationId as string,
+	);
+
+	// Phase 3: Query transactions for this user + agent's conversations
 	const pipeline = [
 		{
 			$match: {
@@ -252,7 +305,7 @@ export async function getAgentUsageByUserTimeSeries(
 
 	if (preGrouped.length === 0) return [];
 
-	// Phase 3: In-memory aggregation by time bucket
+	// Phase 4: In-memory aggregation by time bucket
 	const timeSeriesMap = new Map<
 		string,
 		{ totalInputToken: number; totalOutputToken: number; requests: number }
