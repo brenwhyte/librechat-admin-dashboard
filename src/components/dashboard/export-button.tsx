@@ -10,6 +10,7 @@ import { format } from "date-fns";
 import { useAtomValue } from "jotai";
 import { loadable } from "jotai/utils";
 import { useCallback, useState } from "react";
+import { agentUsageByUserAtom } from "@/atoms/agent-usage-by-user-atom";
 import { allAgentsStatsTableAtom } from "@/atoms/all-agents-stats-table-atom";
 import { allModelsStatsTableAtom } from "@/atoms/all-models-stats-table-atom";
 import { dateRangeAtom } from "@/atoms/date-range-atom";
@@ -29,6 +30,14 @@ interface ExportData {
 	agents: {
 		agentName: string;
 		model: string;
+		totalInputToken: number;
+		totalOutputToken: number;
+		requests: number;
+	}[];
+	agentUsageByUser: {
+		name: string;
+		email: string;
+		agentName: string;
 		totalInputToken: number;
 		totalOutputToken: number;
 		requests: number;
@@ -136,7 +145,39 @@ const exportToExcel = async (data: ExportData) => {
 		agentsSheet.getColumn(6).width = 15;
 	}
 
-	// Sheet 4: MCP Tools
+	// Sheet 4: Agent Usage by User
+	if (data.agentUsageByUser.length > 0) {
+		const agentByUserSheet = wb.addWorksheet("Agent Usage by User");
+		agentByUserSheet.addRow([
+			"Name",
+			"Email",
+			"Agent",
+			"Requests",
+			"Input Tokens",
+			"Output Tokens",
+			"Total Tokens",
+		]);
+		data.agentUsageByUser.forEach((u) => {
+			agentByUserSheet.addRow([
+				u.name,
+				u.email,
+				u.agentName,
+				u.requests,
+				u.totalInputToken,
+				u.totalOutputToken,
+				u.totalInputToken + u.totalOutputToken,
+			]);
+		});
+		agentByUserSheet.getColumn(1).width = 25;
+		agentByUserSheet.getColumn(2).width = 30;
+		agentByUserSheet.getColumn(3).width = 25;
+		agentByUserSheet.getColumn(4).width = 12;
+		agentByUserSheet.getColumn(5).width = 15;
+		agentByUserSheet.getColumn(6).width = 15;
+		agentByUserSheet.getColumn(7).width = 15;
+	}
+
+	// Sheet 5: MCP Tools
 	if (data.tools.length > 0) {
 		const toolsSheet = wb.addWorksheet("MCP Tools");
 		toolsSheet.addRow(["Tool Name", "Server Name", "Call Count"]);
@@ -165,6 +206,7 @@ const exportToExcel = async (data: ExportData) => {
 const loadableTokens = loadable(inputOuputTokenAtom);
 const loadableModels = loadable(allModelsStatsTableAtom);
 const loadableAgents = loadable(allAgentsStatsTableAtom);
+const loadableAgentUsageByUser = loadable(agentUsageByUserAtom);
 const loadableTools = loadable(mcpToolStatsTableAtom);
 
 const ExportButton = () => {
@@ -176,6 +218,7 @@ const ExportButton = () => {
 	const tokensData = useAtomValue(loadableTokens);
 	const modelsData = useAtomValue(loadableModels);
 	const agentsData = useAtomValue(loadableAgents);
+	const agentUsageByUserData = useAtomValue(loadableAgentUsageByUser);
 	const toolsData = useAtomValue(loadableTools);
 
 	const handleExcelExport = useCallback(async () => {
@@ -186,6 +229,10 @@ const ExportButton = () => {
 				tokens: tokensData.state === "hasData" ? tokensData.data : [],
 				models: modelsData.state === "hasData" ? modelsData.data : [],
 				agents: agentsData.state === "hasData" ? agentsData.data : [],
+				agentUsageByUser:
+					agentUsageByUserData.state === "hasData"
+						? agentUsageByUserData.data
+						: [],
 				tools: toolsData.state === "hasData" ? toolsData.data : [],
 			};
 			await exportToExcel(exportData);
@@ -194,7 +241,14 @@ const ExportButton = () => {
 		} finally {
 			setIsExporting(false);
 		}
-	}, [dateRange, tokensData, modelsData, agentsData, toolsData]);
+	}, [
+		dateRange,
+		tokensData,
+		modelsData,
+		agentsData,
+		agentUsageByUserData,
+		toolsData,
+	]);
 
 	return (
 		<Tooltip title="Export as Excel">
