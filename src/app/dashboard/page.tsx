@@ -8,6 +8,12 @@ import AgentUsageByUserTableWithChart from "@/components/dashboard/agent-usage-b
 import AllAgentsStatsTableWithChart from "@/components/dashboard/all-agents-stats-table-with-chart";
 import AllModelStatsTableChartWithChart from "@/components/dashboard/all-model-stats-table-with-chart";
 import AllModelUsagePieChart from "@/components/dashboard/all-model-usage-pie-chart";
+import CacheHitRateText from "@/components/dashboard/cache-hit-rate-text";
+import CacheReadTokenText from "@/components/dashboard/cache-read-token-text";
+import CacheTokensChart from "@/components/dashboard/cache-tokens-chart";
+import CacheUsageByModelTable from "@/components/dashboard/cache-usage-by-model-table";
+import CacheUsageByUserTable from "@/components/dashboard/cache-usage-by-user-table";
+import CacheWriteTokenText from "@/components/dashboard/cache-write-token-text";
 import ConversationsText from "@/components/dashboard/conversations-text";
 import CostByDomainPieChart from "@/components/dashboard/cost-by-domain-pie-chart";
 import CostByUserTable from "@/components/dashboard/cost-by-user-table";
@@ -267,6 +273,63 @@ const DashboardPage = () => {
 							}}
 						>
 							<AgentUsageByUserTableWithChart />
+						</Box>
+
+						{/* Cache Efficiency Section */}
+						{/* Row: Cache KPI tiles */}
+						<Box
+							sx={{
+								display: "grid",
+								gridTemplateColumns: "repeat(3, 1fr)",
+								gap: 2,
+								marginTop: "40px",
+								marginBottom: "16px",
+								"@media (max-width: 900px)": {
+									gridTemplateColumns: "1fr",
+								},
+							}}
+						>
+							<Box sx={{ ...textBoxSx }}>
+								<CacheWriteTokenText />
+							</Box>
+							<Box sx={{ ...textBoxSx }}>
+								<CacheReadTokenText />
+							</Box>
+							<Box sx={{ ...textBoxSx }}>
+								<CacheHitRateText />
+							</Box>
+						</Box>
+						{/* Cache tokens over time chart */}
+						<Box
+							bgcolor={boardsBackgroundColor}
+							borderRadius={"20px"}
+							sx={{ ...darkModeBorder, marginBottom: "16px" }}
+						>
+							<CacheTokensChart />
+						</Box>
+						{/* Cache breakdown tables */}
+						<Box
+							sx={{
+								display: "flex",
+								flexDirection: { lg: "row", xs: "column" },
+								gap: 3,
+								marginBottom: "16px",
+							}}
+						>
+							<Box
+								bgcolor={boardsBackgroundColor}
+								borderRadius={"20px"}
+								sx={{ ...darkModeBorder, flex: "1 1 0", minWidth: 0 }}
+							>
+								<CacheUsageByUserTable />
+							</Box>
+							<Box
+								bgcolor={boardsBackgroundColor}
+								borderRadius={"20px"}
+								sx={{ ...darkModeBorder, flex: "1 1 0", minWidth: 0 }}
+							>
+								<CacheUsageByModelTable />
+							</Box>
 						</Box>
 						<Box
 							sx={{

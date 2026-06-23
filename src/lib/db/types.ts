@@ -133,6 +133,55 @@ export interface AgentUsageByUserEntry {
 }
 
 /**
+ * Cache token statistics with period comparison
+ */
+export interface CacheTokenSummaryResult {
+	currentWriteTokens: number;
+	currentReadTokens: number;
+	currentInputTokens: number;
+	prevWriteTokens: number;
+	prevReadTokens: number;
+	prevInputTokens: number;
+}
+
+/**
+ * Cache token time series entry (one bucket per day/hour/month)
+ */
+export interface CacheTokenTimeSeriesEntry {
+	day?: string;
+	hour?: string;
+	month?: string;
+	inputTokens: number;
+	writeTokens: number;
+	readTokens: number;
+}
+
+/**
+ * Cache token usage broken down by user
+ */
+export interface CacheUsageByUserEntry {
+	userId: string;
+	email: string;
+	name: string;
+	inputTokens: number;
+	writeTokens: number;
+	readTokens: number;
+	hitRate: number;
+}
+
+/**
+ * Cache token usage broken down by model/endpoint
+ */
+export interface CacheUsageByModelEntry {
+	model: string;
+	endpoint: string;
+	inputTokens: number;
+	writeTokens: number;
+	readTokens: number;
+	hitRate: number;
+}
+
+/**
  * Aggregation granularity for time series data
  */
 export type TimeGranularity = "hour" | "day" | "month";
