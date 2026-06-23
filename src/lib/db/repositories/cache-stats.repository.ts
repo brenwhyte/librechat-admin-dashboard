@@ -3,15 +3,18 @@
  *
  * Queries the `transactions` collection for Anthropic prompt-caching metrics.
  *
- * Schema note: prompt transactions may carry three optional numeric fields:
- *   inputTokens  — regular (non-cached) input tokens
- *   writeTokens  — cache_creation_input_tokens (written to cache)
- *   readTokens   — cache_read_input_tokens (cache hits, discounted)
+ * Schema note: prompt transactions carry three optional numeric fields,
+ * stored as NEGATIVE values (same sign convention as rawAmount):
+ *   inputTokens  — regular (non-cached) input tokens  (e.g. -11187)
+ *   writeTokens  — cache_creation_input_tokens          (0 for OpenAI auto-cache; negative for Anthropic direct API)
+ *   readTokens   — cache_read_input_tokens (cache hits) (e.g. -43520)
  *
- * Non-Anthropic models have no cache fields; use $ifNull to default to 0.
+ * OpenAI models (gpt-5.x): readTokens is negative when cached; writeTokens is always 0.
+ * Anthropic via Bedrock: fields absent entirely (Bedrock path doesn't populate them).
+ * Anthropic direct API:  all three fields populated as negative values.
  *
- * DocumentDB constraint: $facet is not supported. All multi-period queries
- * run as parallel Promise.all aggregations (same pattern as token-stats.repository.ts).
+ * Filter: use $lt: 0 (not $gt: 0) to detect non-zero cache usage.
+ * Sums:   wrap with $abs to return positive token counts.
  */
 
 import type { ObjectId } from "mongodb";
@@ -32,25 +35,26 @@ const DATE_FORMATS: Record<TimeGranularity, string> = {
 	month: "%Y-%m",
 };
 
-/** Shared aggregation stage: sum the three cache fields */
+/** Shared aggregation stage: sum the three cache fields (abs — values are stored negative) */
 const sumCacheFields = [
 	{
 		$group: {
 			_id: null,
-			totalWriteTokens: { $sum: { $ifNull: ["$writeTokens", 0] } },
-			totalReadTokens: { $sum: { $ifNull: ["$readTokens", 0] } },
-			totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
+			totalWriteTokens: { $sum: { $abs: { $ifNull: ["$writeTokens", 0] } } },
+			totalReadTokens: { $sum: { $abs: { $ifNull: ["$readTokens", 0] } } },
+			totalInputTokens: { $sum: { $abs: { $ifNull: ["$inputTokens", 0] } } },
 		},
 	},
 ];
 
-/** Base $match for cache-relevant prompt transactions in a date range */
+/** Base $match for cache-relevant prompt transactions in a date range.
+ * Values are stored as negative — use $lt: 0 to detect non-zero cache usage. */
 function cacheMatchStage(start: Date, end: Date) {
 	return {
 		$match: {
 			createdAt: { $gte: start, $lte: end },
 			tokenType: "prompt",
-			$or: [{ writeTokens: { $gt: 0 } }, { readTokens: { $gt: 0 } }],
+			$or: [{ writeTokens: { $lt: 0 } }, { readTokens: { $lt: 0 } }],
 		},
 	};
 }
@@ -125,9 +129,9 @@ export async function getCacheTokenTimeSeries(
 						},
 					},
 				},
-				writeTokens: { $sum: { $ifNull: ["$writeTokens", 0] } },
-				readTokens: { $sum: { $ifNull: ["$readTokens", 0] } },
-				inputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
+				writeTokens: { $sum: { $abs: { $ifNull: ["$writeTokens", 0] } } },
+				readTokens: { $sum: { $abs: { $ifNull: ["$readTokens", 0] } } },
+				inputTokens: { $sum: { $abs: { $ifNull: ["$inputTokens", 0] } } },
 			},
 		},
 		{ $sort: { [`_id.${timeField}`]: 1 } },
@@ -178,9 +182,9 @@ export async function getCacheUsageByUser(
 		{
 			$group: {
 				_id: "$user",
-				inputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
-				writeTokens: { $sum: { $ifNull: ["$writeTokens", 0] } },
-				readTokens: { $sum: { $ifNull: ["$readTokens", 0] } },
+				inputTokens: { $sum: { $abs: { $ifNull: ["$inputTokens", 0] } } },
+				writeTokens: { $sum: { $abs: { $ifNull: ["$writeTokens", 0] } } },
+				readTokens: { $sum: { $abs: { $ifNull: ["$readTokens", 0] } } },
 			},
 		},
 	];
@@ -260,9 +264,9 @@ export async function getCacheUsageByModel(
 					model: { $ifNull: ["$model", "unknown"] },
 					endpoint: { $ifNull: ["$context", "unknown"] },
 				},
-				inputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
-				writeTokens: { $sum: { $ifNull: ["$writeTokens", 0] } },
-				readTokens: { $sum: { $ifNull: ["$readTokens", 0] } },
+				inputTokens: { $sum: { $abs: { $ifNull: ["$inputTokens", 0] } } },
+				writeTokens: { $sum: { $abs: { $ifNull: ["$writeTokens", 0] } } },
+				readTokens: { $sum: { $abs: { $ifNull: ["$readTokens", 0] } } },
 			},
 		},
 		{ $sort: { readTokens: -1 } },
