@@ -51,12 +51,22 @@ docker run -p 3000:3000 \
 
 ## Environment Variables
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `MONGODB_URI` | Yes | MongoDB connection string |
-| `DASHBOARD_PASSWORD` | Yes | Dashboard login password |
-| `SESSION_SECRET` | No | Session signing secret (auto-generated) |
-| `NEXT_PUBLIC_BASE_PATH` | No | Base path for reverse proxy (e.g., `/dashboard`) |
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `MONGODB_URI` | Yes | — | MongoDB connection string |
+| `DASHBOARD_PASSWORD` | Yes | — | Dashboard login password |
+| `MONGODB_DB_NAME` | No | _(from URI)_ | Override the database name extracted from `MONGODB_URI` |
+| `SESSION_SECRET` | No | _(auto-generated)_ | Session signing secret |
+| `NEXT_PUBLIC_BASE_PATH` | No | — | Base path for reverse proxy (e.g., `/dashboard`) |
+| `MONGO_MAX_POOL_SIZE` | No | `20` | Maximum number of connections in the MongoDB connection pool |
+| `MONGO_MIN_POOL_SIZE` | No | `2` | Minimum number of connections kept open in the pool |
+| `MONGO_MAX_IDLE_TIME_MS` | No | `120000` | Milliseconds a connection can remain idle before being closed |
+| `MONGO_CONNECT_TIMEOUT_MS` | No | `30000` | Milliseconds to wait when opening a new connection |
+| `MONGO_SOCKET_TIMEOUT_MS` | No | `60000` | Milliseconds to wait for a response on an open socket |
+| `MONGO_SERVER_SELECTION_TIMEOUT_MS` | No | `30000` | Milliseconds to wait for server selection before erroring |
+| `MONGO_QUERY_MAX_TIME_MS` | No | `60000` | Milliseconds the MongoDB server is allowed to spend on a single query (`maxTimeMS`) |
+
+> **Note for pool / timeout variables**: values that are blank, non-numeric, non-integer, zero, or negative are silently ignored and the default is used instead.
 
 ## Reverse Proxy / Kubernetes Ingress
 

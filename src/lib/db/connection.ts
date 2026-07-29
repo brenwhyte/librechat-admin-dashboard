@@ -14,6 +14,10 @@ import {
  * Handles connection pooling and database access with proper configuration.
  * The database name is extracted from the connection URI or can be overridden
  * via MONGODB_DB_NAME environment variable.
+ *
+ * All numeric MongoClient options are configurable via environment variables
+ * (see `clientOptions` below). Values that are unset, blank, non-numeric,
+ * non-finite, negative, zero, or non-integer fall back to the listed defaults.
  */
 
 // Default to local development database if not specified
@@ -56,6 +60,29 @@ if (dbNameOverride && dbNameFromUri && dbNameOverride !== dbNameFromUri) {
 }
 
 /**
+ * Parse a positive integer (ms / pool size) from an environment variable.
+ *
+ * Returns `fallback` when the variable is:
+ * - unset or blank
+ * - not a valid number
+ * - not finite
+ * - not an integer (decimal fraction present)
+ * - zero or negative
+ *
+ * @param envVar  - Value of the environment variable (may be undefined)
+ * @param fallback - Default value to use when the input is invalid
+ */
+function parsePositiveInt(
+	envVar: string | undefined,
+	fallback: number,
+): number {
+	if (!envVar || envVar.trim() === "") return fallback;
+	const n = Number(envVar);
+	if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) return fallback;
+	return n;
+}
+
+/**
  * MongoDB client options for a read-only dashboard sharing a DB with LibreChat.
  *
  * Pool size rationale:
@@ -64,15 +91,34 @@ if (dbNameOverride && dbNameFromUri && dbNameOverride !== dbNameFromUri) {
  * - Keep pool small to avoid starving the main LibreChat app of connections
  * - Cosmos DB M20 has limited connection capacity (~200-500 total)
  * - maxPoolSize: 20 handles cold-start bursts; caching handles the rest
+ *
+ * All numeric options can be overridden at runtime via environment variables.
+ * Invalid values (non-numeric, non-integer, ≤ 0) silently fall back to the
+ * hard-coded defaults shown below.
+ *
+ * | Option                   | Env var                             | Default  |
+ * |--------------------------|-------------------------------------|----------|
+ * | maxPoolSize              | MONGO_MAX_POOL_SIZE                 | 20       |
+ * | minPoolSize              | MONGO_MIN_POOL_SIZE                 | 2        |
+ * | maxIdleTimeMS            | MONGO_MAX_IDLE_TIME_MS              | 120000   |
+ * | connectTimeoutMS         | MONGO_CONNECT_TIMEOUT_MS            | 30000    |
+ * | socketTimeoutMS          | MONGO_SOCKET_TIMEOUT_MS             | 60000    |
+ * | serverSelectionTimeoutMS | MONGO_SERVER_SELECTION_TIMEOUT_MS   | 30000    |
  */
 const clientOptions: MongoClientOptions = {
-	maxPoolSize: 20,
-	minPoolSize: 2,
-	maxIdleTimeMS: 120000,
-	connectTimeoutMS: 30000,
-	socketTimeoutMS: 60000,
-	serverSelectionTimeoutMS: 30000,
-	retryWrites: false, // Cosmos DB compatibility
+	maxPoolSize: parsePositiveInt(process.env.MONGO_MAX_POOL_SIZE, 20),
+	minPoolSize: parsePositiveInt(process.env.MONGO_MIN_POOL_SIZE, 2),
+	maxIdleTimeMS: parsePositiveInt(process.env.MONGO_MAX_IDLE_TIME_MS, 120000),
+	connectTimeoutMS: parsePositiveInt(
+		process.env.MONGO_CONNECT_TIMEOUT_MS,
+		30000,
+	),
+	socketTimeoutMS: parsePositiveInt(process.env.MONGO_SOCKET_TIMEOUT_MS, 60000),
+	serverSelectionTimeoutMS: parsePositiveInt(
+		process.env.MONGO_SERVER_SELECTION_TIMEOUT_MS,
+		30000,
+	),
+	retryWrites: false, // Cosmos DB compatibility — do not make this configurable
 	retryReads: true,
 };
 
@@ -143,10 +189,17 @@ export type CollectionName = (typeof Collections)[keyof typeof Collections];
  * On Cosmos DB M20, this can starve the main LibreChat app of all available resources.
  *
  * We use tiered timeouts based on query complexity:
- * - QUERY_MAX_TIME_MS (60s): All queries use this timeout. After the $lookup elimination
- *   refactor (Phase 2.5), all queries are single-collection operations with date-range filters.
+ * - QUERY_MAX_TIME_MS (default 60s): All queries use this timeout. After the $lookup
+ *   elimination refactor (Phase 2.5), all queries are single-collection operations with
+ *   date-range filters.
+ *
+ * Override via the MONGO_QUERY_MAX_TIME_MS environment variable.
+ * Invalid values (non-numeric, non-integer, ≤ 0) fall back to 60000.
  */
-export const QUERY_MAX_TIME_MS = 60_000;
+export const QUERY_MAX_TIME_MS = parsePositiveInt(
+	process.env.MONGO_QUERY_MAX_TIME_MS,
+	60_000,
+);
 
 /**
  * Graceful shutdown handler
