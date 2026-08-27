@@ -29,10 +29,12 @@ export async function getActiveUsers(
 					{ $group: { _id: "$user" } },
 					{ $count: "activeUserCount" },
 				],
-				{ maxTimeMS: QUERY_MAX_TIME_MS },
+				{
+					maxTimeMS: QUERY_MAX_TIME_MS,
+					// DocumentDB's planner does not reliably choose this index on its own. See APT-603.
+					hint: "idx_messages_createdAt_user_covering",
+				},
 			)
-			// DocumentDB's planner does not reliably choose this index on its own. See APT-603.
-			.hint("idx_messages_createdAt_user_covering")
 			.toArray(),
 		collection
 			.aggregate<{ activeUserCount: number }>(
@@ -41,9 +43,12 @@ export async function getActiveUsers(
 					{ $group: { _id: "$user" } },
 					{ $count: "activeUserCount" },
 				],
-				{ maxTimeMS: QUERY_MAX_TIME_MS },
+				{
+					maxTimeMS: QUERY_MAX_TIME_MS,
+					// DocumentDB's planner does not reliably choose this index on its own. See APT-603.
+					hint: "idx_messages_createdAt_user_covering",
+				},
 			)
-			.hint("idx_messages_createdAt_user_covering")
 			.toArray(),
 	]);
 
@@ -73,10 +78,12 @@ export async function getConversations(
 					{ $group: { _id: "$conversationId" } },
 					{ $count: "conversationCount" },
 				],
-				{ maxTimeMS: QUERY_MAX_TIME_MS },
+				{
+					maxTimeMS: QUERY_MAX_TIME_MS,
+					// DocumentDB's planner does not reliably choose this index on its own. See APT-603.
+					hint: "idx_messages_createdAt_conversationId_covering",
+				},
 			)
-			// DocumentDB's planner does not reliably choose this index on its own. See APT-603.
-			.hint("idx_messages_createdAt_conversationId_covering")
 			.toArray(),
 		collection
 			.aggregate<{ conversationCount: number }>(
@@ -85,9 +92,12 @@ export async function getConversations(
 					{ $group: { _id: "$conversationId" } },
 					{ $count: "conversationCount" },
 				],
-				{ maxTimeMS: QUERY_MAX_TIME_MS },
+				{
+					maxTimeMS: QUERY_MAX_TIME_MS,
+					// DocumentDB's planner does not reliably choose this index on its own. See APT-603.
+					hint: "idx_messages_createdAt_conversationId_covering",
+				},
 			)
-			.hint("idx_messages_createdAt_conversationId_covering")
 			.toArray(),
 	]);
 

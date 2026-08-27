@@ -105,9 +105,11 @@ export async function getModelUsageByProvider(
 		.aggregate<{
 			_id: { conversationId: string; model: string };
 			tokenCount: number;
-		}>(preGroupPipeline, { maxTimeMS: QUERY_MAX_TIME_MS })
-		// DocumentDB's planner does not reliably choose this index on its own. See APT-603.
-		.hint("idx_transactions_createdAt_model")
+		}>(preGroupPipeline, {
+			maxTimeMS: QUERY_MAX_TIME_MS,
+			// DocumentDB's planner does not reliably choose this index on its own. See APT-603.
+			hint: "idx_transactions_createdAt_model",
+		})
 		.toArray();
 
 	if (preGrouped.length === 0) return [];
@@ -210,9 +212,11 @@ export async function getModelStatsTable(
 			_id: { conversationId: string; model: string; tokenType: string };
 			totalAmount: number;
 			count: number;
-		}>(preGroupPipeline, { maxTimeMS: QUERY_MAX_TIME_MS })
-		// DocumentDB's planner does not reliably choose this index on its own. See APT-603.
-		.hint("idx_transactions_createdAt_model")
+		}>(preGroupPipeline, {
+			maxTimeMS: QUERY_MAX_TIME_MS,
+			// DocumentDB's planner does not reliably choose this index on its own. See APT-603.
+			hint: "idx_transactions_createdAt_model",
+		})
 		.toArray();
 
 	if (preGrouped.length === 0) return [];
@@ -334,12 +338,14 @@ export async function getModelTimeSeries(
 			};
 			totalAmount: number;
 			count: number;
-		}>(preGroupPipeline, { maxTimeMS: QUERY_MAX_TIME_MS })
-		// NOTE: this query filters by an exact `model` value (not `model: {$ne: null}`
-		// like the other two call sites above) — verified via explain() that this hint
-		// still produces IXSCAN/IXONLYSCAN for this access pattern.
-		// DocumentDB's planner does not reliably choose this index on its own. See APT-603.
-		.hint("idx_transactions_createdAt_model")
+		}>(preGroupPipeline, {
+			maxTimeMS: QUERY_MAX_TIME_MS,
+			// NOTE: this query filters by an exact `model` value (not `model: {$ne: null}`
+			// like the other two call sites above) — verified via explain() that this hint
+			// still produces IXSCAN/IXONLYSCAN for this access pattern.
+			// DocumentDB's planner does not reliably choose this index on its own. See APT-603.
+			hint: "idx_transactions_createdAt_model",
+		})
 		.toArray();
 
 	if (preGrouped.length === 0) return [];
