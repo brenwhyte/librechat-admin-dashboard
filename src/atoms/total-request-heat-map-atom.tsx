@@ -2,6 +2,7 @@ import { startOfDay } from "date-fns";
 import { atom } from "jotai";
 import type { RequestHeatMap } from "@/components/models/request-heat-map";
 import { API_BASE } from "@/lib/utils/api-base";
+import { queuedFetch } from "@/lib/utils/fetch-queue";
 import { dateRangeAtom } from "./date-range-atom";
 
 /**
@@ -32,7 +33,7 @@ async function fetchHeatmapData(
 	endDate: Date,
 ): Promise<RequestHeatMap[]> {
 	const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-	const res = await fetch(
+	const res = await queuedFetch(
 		`${API_BASE}/total-request-heat-map?start=${startDate.toISOString()}&end=${endDate.toISOString()}&timezone=${encodeURIComponent(timezone)}`,
 	);
 	if (!res.ok) throw new Error(`HTTP Error ${res.status}`);

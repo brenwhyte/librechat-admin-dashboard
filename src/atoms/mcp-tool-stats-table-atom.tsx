@@ -1,6 +1,7 @@
 import { atom } from "jotai";
 import type { McpToolStatsTable } from "@/components/models/mcp-tool-stats";
 import { API_BASE } from "@/lib/utils/api-base";
+import { queuedFetch } from "@/lib/utils/fetch-queue";
 import { dateRangeAtom } from "./date-range-atom";
 
 export const mcpToolStatsTableAtom = atom<Promise<McpToolStatsTable[]>>(
@@ -11,7 +12,9 @@ export const mcpToolStatsTableAtom = atom<Promise<McpToolStatsTable[]>>(
 			end: dateRange.endDate?.toISOString() ?? "",
 		});
 
-		const response = await fetch(`${API_BASE}/mcp-tool-stats-table?${params}`);
+		const response = await queuedFetch(
+			`${API_BASE}/mcp-tool-stats-table?${params}`,
+		);
 		if (!response.ok) {
 			throw new Error("Failed to fetch MCP tool stats table");
 		}

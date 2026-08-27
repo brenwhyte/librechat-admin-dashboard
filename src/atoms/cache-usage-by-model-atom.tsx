@@ -1,11 +1,12 @@
 import { atom } from "jotai";
 import type { CacheUsageByModel } from "@/components/models/cache-usage-by-model";
 import { API_BASE } from "@/lib/utils/api-base";
+import { queuedFetch } from "@/lib/utils/fetch-queue";
 import { dateRangeAtom } from "./date-range-atom";
 
 export const cacheUsageByModelAtom = atom(async (get) => {
 	const timeArea = get(dateRangeAtom);
-	const res = await fetch(
+	const res = await queuedFetch(
 		`${API_BASE}/cache-usage-by-model?start=${timeArea?.startDate?.toISOString()}&end=${timeArea?.endDate?.toISOString()}`,
 	);
 	if (!res.ok) throw new Error(`cache-usage-by-model API error: ${res.status}`);

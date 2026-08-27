@@ -3,13 +3,14 @@ import { atomFamily } from "jotai/utils";
 import type { AllAgentsStatsChart } from "@/components/models/all-agents-stats-chart";
 import { timeMap } from "@/components/utils/time-map";
 import { API_BASE } from "@/lib/utils/api-base";
+import { queuedFetch } from "@/lib/utils/fetch-queue";
 import { dateRangeAtom } from "./date-range-atom";
 
 export const allAgentsStatsTableChartAtom = atomFamily((agent: string) =>
 	atom(async (get) => {
 		const timeArea = get(dateRangeAtom);
 		const time = timeMap(timeArea);
-		const res = await fetch(
+		const res = await queuedFetch(
 			`${API_BASE}/all-agents-stats-table-chart?groupRange=${time}&agent=${encodeURIComponent(agent)}&start=${timeArea?.startDate?.toISOString()}&end=${timeArea?.endDate?.toISOString()}`,
 		);
 		if (!res.ok)
