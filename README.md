@@ -62,7 +62,7 @@ docker run -p 3000:3000 \
 | `MONGO_MIN_POOL_SIZE` | No | `2` | Minimum number of connections kept open in the pool |
 | `MONGO_MAX_IDLE_TIME_MS` | No | `120000` | Milliseconds a connection can remain idle before being closed |
 | `MONGO_CONNECT_TIMEOUT_MS` | No | `30000` | Milliseconds to wait when opening a new connection |
-| `MONGO_SOCKET_TIMEOUT_MS` | No | `60000` | Milliseconds to wait for a response on an open socket |
+| `MONGO_SOCKET_TIMEOUT_MS` | No | `90000` | Milliseconds to wait for a response on an open socket |
 | `MONGO_SERVER_SELECTION_TIMEOUT_MS` | No | `30000` | Milliseconds to wait for server selection before erroring |
 | `MONGO_QUERY_MAX_TIME_MS` | No | `60000` | Milliseconds the MongoDB server is allowed to spend on a single query (`maxTimeMS`) |
 
