@@ -10,8 +10,10 @@ import { useAtom } from "jotai";
 import { loadable } from "jotai/utils";
 import { useEffect, useMemo, useState } from "react";
 import { costByDomainAtom } from "@/atoms/cost-by-domain-atom";
+import { widgetRetryAtoms } from "@/atoms/widget-retry-atoms";
 import styles from "@/components/dashboard/all-model-usage-pie-chart.module.css";
 import type { CostByDomain } from "@/components/models/cost-by-domain";
+import WidgetRetryButton from "./widget-retry-button";
 
 // Color palette for domains
 const domainColors = [
@@ -150,6 +152,7 @@ const CostByDomainPieChart = () => {
 						<Typography color={"error"} sx={{ opacity: 0.8 }}>
 							{String(domainData.error)}
 						</Typography>
+						<WidgetRetryButton retryAtom={widgetRetryAtoms.costByDomain} />
 					</Box>
 				) : domainData.state === "hasData" && !hasData ? (
 					<Box

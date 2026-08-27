@@ -16,11 +16,13 @@ import { useAtom } from "jotai";
 import { loadable } from "jotai/utils";
 import React, { useEffect, useMemo, useState } from "react";
 import { allModelsStatsTableAtom } from "@/atoms/all-models-stats-table-atom";
+import { widgetRetryAtoms } from "@/atoms/widget-retry-atoms";
 import useTableManager from "@/hooks/useTableManager";
 import type { AllModelsStatsTable } from "../models/all-models-stats-table";
 import AllModelStatsTableChart from "./all-model-stats-table-chart";
 import EnhancedTableHead from "./enhanced-table-head";
 import EnhancedTableToolbar from "./enhanced-table-toolbar";
+import WidgetRetryButton from "./widget-retry-button";
 
 // Types
 interface AllModelsStatsTableRow {
@@ -184,6 +186,9 @@ const AllModelStatsTableChartWithChart: React.FC = () => {
 									sx={{ color: "error.main" }}
 								>
 									Error loading data
+									<WidgetRetryButton
+										retryAtom={widgetRetryAtoms.allModelsStatsTable}
+									/>
 								</TableCell>
 							</TableRow>
 						) : filteredRows.length === 0 && searchTerm.length > 0 ? (

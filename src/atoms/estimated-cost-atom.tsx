@@ -12,10 +12,12 @@ export interface EstimatedCostSummary {
 	userCount: number;
 }
 
+// Above-the-fold KPI — high queue priority so it runs before secondary widgets.
 export const estimatedCostAtom = atom(async (get) => {
 	const timeArea = get(dateRangeAtom);
 	const res = await queuedFetch(
 		`${API_BASE}/cost-by-domain?start=${timeArea?.startDate?.toISOString()}&end=${timeArea?.endDate?.toISOString()}`,
+		{ queuePriority: "high" },
 	);
 	const domains: CostByDomain[] = await res.json();
 
