@@ -3,6 +3,7 @@ import { atomFamily } from "jotai/utils";
 import type { AgentUsageByUserChart } from "@/components/models/agent-usage-by-user-chart";
 import { timeMap } from "@/components/utils/time-map";
 import { API_BASE } from "@/lib/utils/api-base";
+import { queuedFetch } from "@/lib/utils/fetch-queue";
 import { dateRangeAtom } from "./date-range-atom";
 
 /**
@@ -14,7 +15,7 @@ export const agentUsageByUserChartAtom = atomFamily((key: string) =>
 		const timeArea = get(dateRangeAtom);
 		const time = timeMap(timeArea);
 		const [userId, agentId] = key.split("::");
-		const res = await fetch(
+		const res = await queuedFetch(
 			`${API_BASE}/agent-usage-by-user-chart?userId=${encodeURIComponent(userId)}&agentId=${encodeURIComponent(agentId)}&groupRange=${time}&start=${timeArea?.startDate?.toISOString()}&end=${timeArea?.endDate?.toISOString()}`,
 		);
 		if (!res.ok)

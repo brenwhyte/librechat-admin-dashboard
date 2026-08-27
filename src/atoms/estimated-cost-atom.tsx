@@ -1,6 +1,7 @@
 import { atom } from "jotai";
 import type { CostByDomain } from "@/components/models/cost-by-domain";
 import { API_BASE } from "@/lib/utils/api-base";
+import { queuedFetch } from "@/lib/utils/fetch-queue";
 import { dateRangeAtom } from "./date-range-atom";
 
 export interface EstimatedCostSummary {
@@ -13,7 +14,7 @@ export interface EstimatedCostSummary {
 
 export const estimatedCostAtom = atom(async (get) => {
 	const timeArea = get(dateRangeAtom);
-	const res = await fetch(
+	const res = await queuedFetch(
 		`${API_BASE}/cost-by-domain?start=${timeArea?.startDate?.toISOString()}&end=${timeArea?.endDate?.toISOString()}`,
 	);
 	const domains: CostByDomain[] = await res.json();

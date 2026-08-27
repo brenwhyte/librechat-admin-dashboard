@@ -1,6 +1,7 @@
 import { atom } from "jotai";
 import { loadable } from "jotai/utils";
 import { API_BASE } from "@/lib/utils/api-base";
+import { queuedFetch } from "@/lib/utils/fetch-queue";
 import { dateRangeAtom } from "./date-range-atom";
 
 const filesProcessedAsyncAtom = atom(async (get) => {
@@ -10,7 +11,7 @@ const filesProcessedAsyncAtom = atom(async (get) => {
 		return null;
 	}
 
-	const res = await fetch(
+	const res = await queuedFetch(
 		`${API_BASE}/files-processed?start=${dateRange.startDate.toISOString()}&end=${dateRange.endDate.toISOString()}`,
 	);
 

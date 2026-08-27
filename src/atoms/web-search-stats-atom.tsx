@@ -1,5 +1,6 @@
 import { atom } from "jotai";
 import { API_BASE } from "@/lib/utils/api-base";
+import { queuedFetch } from "@/lib/utils/fetch-queue";
 import { dateRangeAtom } from "./date-range-atom";
 
 export interface WebSearchStatsEntry {
@@ -21,7 +22,9 @@ export const webSearchStatsAtom = atom<Promise<WebSearchStatsResponse>>(
 			end: dateRange.endDate?.toISOString() ?? "",
 		});
 
-		const response = await fetch(`${API_BASE}/web-search-stats?${params}`);
+		const response = await queuedFetch(
+			`${API_BASE}/web-search-stats?${params}`,
+		);
 		if (!response.ok) {
 			throw new Error("Failed to fetch web search stats");
 		}
