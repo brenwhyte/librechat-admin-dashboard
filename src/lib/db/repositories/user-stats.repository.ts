@@ -31,6 +31,8 @@ export async function getActiveUsers(
 				],
 				{ maxTimeMS: QUERY_MAX_TIME_MS },
 			)
+			// DocumentDB's planner does not reliably choose this index on its own. See APT-603.
+			.hint("idx_messages_createdAt_user_covering")
 			.toArray(),
 		collection
 			.aggregate<{ activeUserCount: number }>(
@@ -41,6 +43,7 @@ export async function getActiveUsers(
 				],
 				{ maxTimeMS: QUERY_MAX_TIME_MS },
 			)
+			.hint("idx_messages_createdAt_user_covering")
 			.toArray(),
 	]);
 
@@ -72,6 +75,8 @@ export async function getConversations(
 				],
 				{ maxTimeMS: QUERY_MAX_TIME_MS },
 			)
+			// DocumentDB's planner does not reliably choose this index on its own. See APT-603.
+			.hint("idx_messages_createdAt_conversationId_covering")
 			.toArray(),
 		collection
 			.aggregate<{ conversationCount: number }>(
@@ -82,6 +87,7 @@ export async function getConversations(
 				],
 				{ maxTimeMS: QUERY_MAX_TIME_MS },
 			)
+			.hint("idx_messages_createdAt_conversationId_covering")
 			.toArray(),
 	]);
 

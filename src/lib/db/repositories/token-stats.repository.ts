@@ -55,6 +55,8 @@ export async function getTokenCounts(
 				],
 				{ maxTimeMS: QUERY_MAX_TIME_MS },
 			)
+			// DocumentDB's planner does not reliably choose this index on its own. See APT-603.
+			.hint("idx_transactions_createdAt_tokenType")
 			.toArray(),
 		collection
 			.aggregate<{ total: number }>(
@@ -69,6 +71,8 @@ export async function getTokenCounts(
 				],
 				{ maxTimeMS: QUERY_MAX_TIME_MS },
 			)
+			// DocumentDB's planner does not reliably choose this index on its own. See APT-603.
+			.hint("idx_transactions_createdAt_tokenType")
 			.toArray(),
 		collection
 			.aggregate<{ total: number }>(
@@ -83,6 +87,8 @@ export async function getTokenCounts(
 				],
 				{ maxTimeMS: QUERY_MAX_TIME_MS },
 			)
+			// DocumentDB's planner does not reliably choose this index on its own. See APT-603.
+			.hint("idx_transactions_createdAt_tokenType")
 			.toArray(),
 		collection
 			.aggregate<{ total: number }>(
@@ -97,6 +103,8 @@ export async function getTokenCounts(
 				],
 				{ maxTimeMS: QUERY_MAX_TIME_MS },
 			)
+			// DocumentDB's planner does not reliably choose this index on its own. See APT-603.
+			.hint("idx_transactions_createdAt_tokenType")
 			.toArray(),
 	]);
 
@@ -144,6 +152,9 @@ export async function getMessageStats(
 				],
 				{ maxTimeMS: QUERY_MAX_TIME_MS },
 			)
+			// DocumentDB's planner does not reliably choose this index on its own.
+			// Confirmed via explain(): COLLSCAN ~235s unhinted vs IXSCAN ~6s hinted. See APT-603.
+			.hint("idx_messages_createdAt_tokens_covering")
 			.toArray(),
 		collection
 			.aggregate<{
@@ -157,6 +168,8 @@ export async function getMessageStats(
 				],
 				{ maxTimeMS: QUERY_MAX_TIME_MS },
 			)
+			// DocumentDB's planner does not reliably choose this index on its own. See APT-603.
+			.hint("idx_messages_createdAt_tokens_covering")
 			.toArray(),
 	]);
 
@@ -223,5 +236,7 @@ export async function getRequestHeatmap(
 
 	return collection
 		.aggregate(pipeline, { maxTimeMS: QUERY_MAX_TIME_MS })
+		// DocumentDB's planner does not reliably choose this index on its own. See APT-603.
+		.hint("createdAt_1")
 		.toArray();
 }

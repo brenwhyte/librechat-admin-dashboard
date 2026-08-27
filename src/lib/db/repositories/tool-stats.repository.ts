@@ -90,6 +90,8 @@ export async function getMcpToolCalls(
 				],
 				{ maxTimeMS: QUERY_MAX_TIME_MS },
 			)
+			// DocumentDB's planner does not reliably choose this index on its own. See APT-603.
+			.hint("idx_messages_createdAt_contenttype")
 			.toArray(),
 		collection
 			.aggregate<{ mcpToolCallCount: number }>(
@@ -104,6 +106,8 @@ export async function getMcpToolCalls(
 				],
 				{ maxTimeMS: QUERY_MAX_TIME_MS },
 			)
+			// DocumentDB's planner does not reliably choose this index on its own. See APT-603.
+			.hint("idx_messages_createdAt_contenttype")
 			.toArray(),
 	]);
 
@@ -146,6 +150,8 @@ export async function getAllToolCalls(
 				],
 				{ maxTimeMS: QUERY_MAX_TIME_MS },
 			)
+			// DocumentDB's planner does not reliably choose this index on its own. See APT-603.
+			.hint("idx_messages_createdAt_contenttype")
 			.toArray(),
 		collection
 			.aggregate<{ toolCallCount: number }>(
@@ -160,6 +166,8 @@ export async function getAllToolCalls(
 				],
 				{ maxTimeMS: QUERY_MAX_TIME_MS },
 			)
+			// DocumentDB's planner does not reliably choose this index on its own. See APT-603.
+			.hint("idx_messages_createdAt_contenttype")
 			.toArray(),
 	]);
 
@@ -250,6 +258,8 @@ export async function getMcpToolStatsTable(
 		.aggregate<McpToolStatsTableEntry>(pipeline, {
 			maxTimeMS: QUERY_MAX_TIME_MS,
 		})
+		// DocumentDB's planner does not reliably choose this index on its own. See APT-603.
+		.hint("idx_messages_createdAt_contenttype")
 		.toArray();
 }
 
@@ -337,6 +347,8 @@ export async function getMcpToolStatsChart(
 		.aggregate<McpToolTimeSeriesEntry>(pipeline, {
 			maxTimeMS: QUERY_MAX_TIME_MS,
 		})
+		// DocumentDB's planner does not reliably choose this index on its own. See APT-603.
+		.hint("idx_messages_createdAt_contenttype")
 		.toArray();
 }
 
@@ -398,6 +410,8 @@ export async function getWebSearchStats(
 				],
 				{ maxTimeMS: QUERY_MAX_TIME_MS },
 			)
+			// DocumentDB's planner does not reliably choose this index on its own. See APT-603.
+			.hint("idx_messages_createdAt_contenttype")
 			.toArray(),
 		collection
 			.aggregate<{
@@ -417,6 +431,8 @@ export async function getWebSearchStats(
 				],
 				{ maxTimeMS: QUERY_MAX_TIME_MS },
 			)
+			// DocumentDB's planner does not reliably choose this index on its own. See APT-603.
+			.hint("idx_messages_createdAt_contenttype")
 			.toArray(),
 	]);
 
