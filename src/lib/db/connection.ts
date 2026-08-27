@@ -102,7 +102,7 @@ function parsePositiveInt(
  * | minPoolSize              | MONGO_MIN_POOL_SIZE                 | 2        |
  * | maxIdleTimeMS            | MONGO_MAX_IDLE_TIME_MS              | 120000   |
  * | connectTimeoutMS         | MONGO_CONNECT_TIMEOUT_MS            | 30000    |
- * | socketTimeoutMS          | MONGO_SOCKET_TIMEOUT_MS             | 60000    |
+ * | socketTimeoutMS          | MONGO_SOCKET_TIMEOUT_MS             | 90000    |
  * | serverSelectionTimeoutMS | MONGO_SERVER_SELECTION_TIMEOUT_MS   | 30000    |
  */
 const clientOptions: MongoClientOptions = {
@@ -113,7 +113,7 @@ const clientOptions: MongoClientOptions = {
 		process.env.MONGO_CONNECT_TIMEOUT_MS,
 		30000,
 	),
-	socketTimeoutMS: parsePositiveInt(process.env.MONGO_SOCKET_TIMEOUT_MS, 60000),
+	socketTimeoutMS: parsePositiveInt(process.env.MONGO_SOCKET_TIMEOUT_MS, 90000),
 	serverSelectionTimeoutMS: parsePositiveInt(
 		process.env.MONGO_SERVER_SELECTION_TIMEOUT_MS,
 		30000,

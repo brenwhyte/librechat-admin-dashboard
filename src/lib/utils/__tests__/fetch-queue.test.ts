@@ -1,13 +1,15 @@
 /**
- * Tests for fetch-queue priority lanes and client timeout (APT-685).
+ * Tests for fetch-queue priority lanes and caller-supplied signal handling (APT-685).
  *
  * Verifies:
  *  - queuedFetch is backward-compatible: works without options, still returns
  *    a Response.
- *  - High-priority tasks are dequeued before normal-priority tasks.
- *  - Client-side timeout causes the request to be rejected and the queue slot
- *    to be released so subsequent requests proceed.
- *  - A caller-supplied signal is forwarded and not overridden.
+ *  - High-priority tasks are dequeued before normal-priority tasks (FIFO within
+ *    each tier).
+ *  - A caller-supplied AbortSignal is forwarded to fetch() unchanged.
+ *  - When a caller-supplied signal fires the queue slot is released immediately
+ *    so waiting requests are not blocked.
+ *  - No default timeout is injected when no signal is provided.
  */
 
 import { queuedFetch } from "../fetch-queue";
@@ -101,6 +103,20 @@ describe("queuedFetch — backward compatibility", () => {
 			"value",
 		);
 	});
+
+	it("does not inject a signal when none is provided by the caller", async () => {
+		const isolated = await freshQueuedFetch();
+		global.fetch = jest.fn().mockResolvedValue(makeResponse());
+
+		await isolated("https://example.com/api/test");
+
+		const callArgs = (global.fetch as jest.Mock).mock.calls[0] as [
+			RequestInfo | URL,
+			RequestInit,
+		];
+		// No signal should be present — no default timeout is injected.
+		expect(callArgs[1]?.signal).toBeUndefined();
+	});
 });
 
 describe("queuedFetch — priority lanes (APT-685)", () => {
@@ -110,13 +126,7 @@ describe("queuedFetch — priority lanes (APT-685)", () => {
 		// We'll track the order in which tasks actually execute via fetch calls.
 		const executionOrder: string[] = [];
 
-		// fetchMock is invoked for each task; it records the URL and returns ok.
-		global.fetch = jest.fn().mockImplementation((input: RequestInfo | URL) => {
-			executionOrder.push(String(input));
-			return Promise.resolve(makeResponse());
-		});
-
-		// Fill all 6 slots with hanging requests so the next ones queue.
+		// Fill all 4 slots with hanging requests so the next ones queue.
 		const hangResolvers: Array<(r: Response) => void> = [];
 		global.fetch = jest.fn().mockImplementation((input: RequestInfo | URL) => {
 			const url = String(input);
@@ -127,8 +137,8 @@ describe("queuedFetch — priority lanes (APT-685)", () => {
 			return Promise.resolve(makeResponse());
 		});
 
-		// Occupy all 6 slots.
-		const hangPromises = Array.from({ length: 6 }, (_, i) =>
+		// Occupy all 4 slots.
+		const hangPromises = Array.from({ length: 4 }, (_, i) =>
 			isolated(`https://hang/${i}`),
 		);
 
@@ -162,14 +172,6 @@ describe("queuedFetch — priority lanes (APT-685)", () => {
 		await hangPromises[3];
 		await Promise.resolve();
 
-		hangResolvers[4]?.(makeResponse());
-		await hangPromises[4];
-		await Promise.resolve();
-
-		hangResolvers[5]?.(makeResponse());
-		await hangPromises[5];
-		await Promise.resolve();
-
 		// Drain remaining tasks.
 		await Promise.all([normalA, normalB, highC, normalD, highE]);
 
@@ -183,11 +185,27 @@ describe("queuedFetch — priority lanes (APT-685)", () => {
 	});
 });
 
-describe("queuedFetch — client timeout (APT-685)", () => {
-	it("rejects with an AbortError when the signal times out", async () => {
+describe("queuedFetch — caller-supplied signal (APT-685)", () => {
+	it("forwards a caller-supplied signal to fetch()", async () => {
+		const isolated = await freshQueuedFetch();
+		const controller = new AbortController();
+		global.fetch = jest.fn().mockResolvedValue(makeResponse());
+
+		await isolated("https://example.com/api/test", {
+			signal: controller.signal,
+		});
+
+		const callArgs = (global.fetch as jest.Mock).mock.calls[0] as [
+			RequestInfo | URL,
+			RequestInit,
+		];
+		expect(callArgs[1]?.signal).toBe(controller.signal);
+	});
+
+	it("rejects with the signal reason when the signal is already aborted", async () => {
 		const isolated = await freshQueuedFetch();
 
-		// Provide a signal that is already aborted to simulate an instant timeout.
+		// Provide a signal that is already aborted to simulate an instant abort.
 		const controller = new AbortController();
 		controller.abort(new DOMException("Timeout", "TimeoutError"));
 
@@ -202,18 +220,18 @@ describe("queuedFetch — client timeout (APT-685)", () => {
 		).rejects.toMatchObject({ name: expect.stringMatching(/Abort|Timeout/) });
 	});
 
-	it("releases the queue slot on timeout so subsequent requests proceed", async () => {
+	it("releases the queue slot on signal abort so subsequent requests proceed", async () => {
 		const isolated = await freshQueuedFetch();
 
 		const controller = new AbortController();
-		controller.abort(new DOMException("Timeout", "TimeoutError"));
+		controller.abort(new DOMException("Cancelled", "AbortError"));
 
 		const normalResponse = makeResponse("normal-ok");
 		global.fetch = jest
 			.fn()
 			.mockImplementation((_input: RequestInfo | URL, init?: RequestInit) => {
 				if (init?.signal === controller.signal) {
-					// This path should not be reached because we short-circuit on aborted signal.
+					// Short-circuit path should not be reached for a pre-aborted signal.
 					return new Promise(() => {
 						/* hang */
 					});
@@ -221,8 +239,8 @@ describe("queuedFetch — client timeout (APT-685)", () => {
 				return Promise.resolve(normalResponse);
 			});
 
-		// Fire the aborted request (slot 1, immediately rejected, slot released).
-		const timedOut = isolated("https://example.com/timeout", {
+		// Fire the aborted request (slot taken, immediately rejected, slot released).
+		const aborted = isolated("https://example.com/aborted", {
 			signal: controller.signal,
 		});
 
@@ -230,8 +248,8 @@ describe("queuedFetch — client timeout (APT-685)", () => {
 		const normal = isolated("https://example.com/normal");
 
 		// The aborted call should reject.
-		await expect(timedOut).rejects.toBeDefined();
-		// The normal call should resolve.
+		await expect(aborted).rejects.toBeDefined();
+		// The normal call should resolve because the slot was released.
 		const res = await normal;
 		expect(res).toBe(normalResponse);
 	});

@@ -162,7 +162,7 @@ export const PERFORMANCE_RECOMMENDATIONS = {
 			minPoolSize: 2,
 			maxIdleTimeMS: 120000,
 			connectTimeoutMS: 30000,
-			socketTimeoutMS: 60000,
+			socketTimeoutMS: 90000,
 			serverSelectionTimeoutMS: 30000,
 		},
 	},

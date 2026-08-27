@@ -229,7 +229,7 @@ describe("MongoClient options — env overrides", () => {
 		expect(opts.minPoolSize).toBe(2);
 		expect(opts.maxIdleTimeMS).toBe(120000);
 		expect(opts.connectTimeoutMS).toBe(30000);
-		expect(opts.socketTimeoutMS).toBe(60000);
+		expect(opts.socketTimeoutMS).toBe(90000);
 		expect(opts.serverSelectionTimeoutMS).toBe(30000);
 	});
 
@@ -309,7 +309,7 @@ describe("MongoClient options — env overrides", () => {
 		await getDatabase();
 
 		const opts = capturedOptions();
-		expect(opts.socketTimeoutMS).toBe(60000); // default
+		expect(opts.socketTimeoutMS).toBe(90000); // default
 	});
 
 	it("falls back to default for blank string", async () => {
