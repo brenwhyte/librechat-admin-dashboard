@@ -14,8 +14,10 @@ import { useAtom } from "jotai";
 import { loadable } from "jotai/utils";
 import { useEffect, useMemo, useState } from "react";
 import { providerWithModelUsageAtom } from "@/atoms/provider-with-model-usage-atom";
+import { widgetRetryAtoms } from "@/atoms/widget-retry-atoms";
 import styles from "@/components/dashboard/all-model-usage-pie-chart.module.css";
 import type { ProviderWithModelUsage } from "@/components/models/provider-with-model-usage";
+import WidgetRetryButton from "./widget-retry-button";
 
 type ProviderName = "azureOpenAI" | "anthropic" | "stackit";
 
@@ -228,6 +230,9 @@ const AllModelUsagePieChart = () => {
 						<Typography color={"error"} sx={{ opacity: 0.8 }}>
 							{String(providerData.error)}
 						</Typography>
+						<WidgetRetryButton
+							retryAtom={widgetRetryAtoms.providerWithModelUsage}
+						/>
 					</Box>
 				) : providerData.state === "hasData" && !hasData ? (
 					<Box

@@ -16,11 +16,13 @@ import { useAtom } from "jotai";
 import { loadable } from "jotai/utils";
 import React, { useEffect, useMemo, useState } from "react";
 import { agentUsageByUserAtom } from "@/atoms/agent-usage-by-user-atom";
+import { widgetRetryAtoms } from "@/atoms/widget-retry-atoms";
 import useTableManager from "@/hooks/useTableManager";
 import type { AgentUsageByUser } from "../models/agent-usage-by-user";
 import AgentUsageByUserTableChart from "./agent-usage-by-user-table-chart";
 import EnhancedTableHead from "./enhanced-table-head";
 import EnhancedTableToolbar from "./enhanced-table-toolbar";
+import WidgetRetryButton from "./widget-retry-button";
 
 interface AgentUsageByUserRow {
 	userId: string;
@@ -185,6 +187,9 @@ const AgentUsageByUserTableWithChart: React.FC = () => {
 									sx={{ color: "error.main" }}
 								>
 									Error loading data
+									<WidgetRetryButton
+										retryAtom={widgetRetryAtoms.agentUsageByUser}
+									/>
 								</TableCell>
 							</TableRow>
 						) : filteredRows.length === 0 && searchTerm.length > 0 ? (

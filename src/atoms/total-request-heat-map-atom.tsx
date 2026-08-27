@@ -4,6 +4,7 @@ import type { RequestHeatMap } from "@/components/models/request-heat-map";
 import { API_BASE } from "@/lib/utils/api-base";
 import { queuedFetch } from "@/lib/utils/fetch-queue";
 import { dateRangeAtom } from "./date-range-atom";
+import { widgetRetryAtoms } from "./widget-retry-atoms";
 
 /**
  * Heatmap data caching
@@ -14,7 +15,7 @@ import { dateRangeAtom } from "./date-range-atom";
  * The cache key is based on calendar dates only, not timestamps.
  * Data is refreshed only when:
  * 1. The date range changes (user picks different dates)
- * 2. The cache is explicitly invalidated (rare)
+ * 2. The retry counter is incremented (per-widget retry button)
  */
 interface HeatmapCache {
 	key: string;
@@ -41,6 +42,7 @@ async function fetchHeatmapData(
 }
 
 export const totalRequestHeatMapAtom = atom(async (get) => {
+	const retryCount = get(widgetRetryAtoms.totalRequestHeatMap); // retry dependency
 	const dateRange = get(dateRangeAtom);
 
 	// Guard against null dates
@@ -48,10 +50,10 @@ export const totalRequestHeatMapAtom = atom(async (get) => {
 		return [];
 	}
 
-	// Create cache key based on day-level dates only
+	// Create cache key based on day-level dates only (+ retry count to bust on manual retry)
 	const startKey = startOfDay(dateRange.startDate).toISOString().split("T")[0];
 	const endKey = startOfDay(dateRange.endDate).toISOString().split("T")[0];
-	const cacheKey = `${startKey}_${endKey}`;
+	const cacheKey = `${startKey}_${endKey}_r${retryCount}`;
 
 	// Return cached data if date range (day-level) hasn't changed
 	if (cacheKey === cache.key && cache.data.length > 0) {

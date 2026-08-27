@@ -16,11 +16,13 @@ import { useAtom } from "jotai";
 import { loadable } from "jotai/utils";
 import React, { useEffect, useMemo, useState } from "react";
 import { mcpToolStatsTableAtom } from "@/atoms/mcp-tool-stats-table-atom";
+import { widgetRetryAtoms } from "@/atoms/widget-retry-atoms";
 import useTableManager from "@/hooks/useTableManager";
 import type { McpToolStatsTable } from "../models/mcp-tool-stats";
 import EnhancedTableHead from "./enhanced-table-head";
 import EnhancedTableToolbar from "./enhanced-table-toolbar";
 import McpToolStatsTableChart from "./mcp-tool-stats-table-chart";
+import WidgetRetryButton from "./widget-retry-button";
 
 // Types
 interface McpToolStatsTableRow {
@@ -181,6 +183,9 @@ const McpToolStatsTableWithChart: React.FC = () => {
 									sx={{ color: "error.main" }}
 								>
 									Error loading data
+									<WidgetRetryButton
+										retryAtom={widgetRetryAtoms.mcpToolStatsTable}
+									/>
 								</TableCell>
 							</TableRow>
 						) : filteredRows.length === 0 && searchTerm.length > 0 ? (

@@ -19,11 +19,13 @@ import { loadable } from "jotai/utils";
 import { useEffect, useMemo, useState } from "react";
 import { dateRangeAtom } from "@/atoms/date-range-atom";
 import { totalRequestHeatMapAtom } from "@/atoms/total-request-heat-map-atom";
+import { widgetRetryAtoms } from "@/atoms/widget-retry-atoms";
 import type { RequestHeatMap } from "@/components/models/request-heat-map";
 import {
 	getHeatmapGranularity,
 	type HeatmapGranularity,
 } from "@/components/utils/date-range-helpers";
+import WidgetRetryButton from "./widget-retry-button";
 
 const timeSlotsLabels = [
 	"00",
@@ -399,12 +401,18 @@ const TotalRequestHeatMap = () => {
 							width: "100%",
 							height: "100%",
 							display: "flex",
+							flexDirection: "column",
 							alignItems: "center",
 							justifyContent: "center",
 							background: vars?.palette.background.paper,
 						}}
 					>
-						<Typography sx={{ color: "red" }}>Error loading data</Typography>
+						<Typography sx={{ color: "error.main" }}>
+							Error loading data
+						</Typography>
+						<WidgetRetryButton
+							retryAtom={widgetRetryAtoms.totalRequestHeatMap}
+						/>
 					</Box>
 				)}
 				{heatMapData.state === "loading" && isClient && (
